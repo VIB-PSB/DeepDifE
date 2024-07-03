@@ -1,0 +1,268 @@
+
+
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import matplotlib
+import numpy as np
+import pandas as pd
+import os
+import re
+import csv
+import shap
+import importlib
+import pathlib
+import pickle
+from random import sample
+from random import sample
+from evoaug_tf import evoaug
+from src.logo_plot_utils import plot_weights_modified
+
+
+
+def getDeepExplainerBackground(background_samples, shuffle, post_hoc_conjoining):
+	"""
+	Prepare the background for deepExplainer
+
+	Parameters:
+	- background_samples (numpy array): Array of dimension (2, #samples, #sequence length, 4) that will be used as the background
+	- shuffle (bool): Shuffle the background
+	- post_hoc_conjoining (bool): Prepare a background to get SHAP values for a post-hoc conjoining model
+
+	Returns:
+	- numpy array: Array of dimension (2, #samples, #sequence length, 4)
+
+	"""
+	fw = background_samples[0]
+	rv = background_samples[1]
+	if shuffle == True:
+		try:
+			rng = np.random.default_rng()
+			
+			fw = rng.permuted(fw, axis = 0)
+			rv = rng.permuted(rv, axis = 0)
+		except:
+			print("Failed to sample randomly")
+	
+	if post_hoc_conjoining:
+		bg = np.stack((fw, rv))
+	else:
+		bg = fw		
+
+	return bg
+
+
+def deepExplain(samples, loaded_model, bg, post_hoc_conjoining=False, show_evo_aug_padding=False, augment_list=[], pad_samples=False, pad_background=False):
+	"""
+	Run deepexplainer based on the provided sequences based on a Tensorflow model and a background
+
+	Parameters:
+	- samples (numpy array): Array of dimension (2, #samples, #sequence length, 4)
+	- loaded_model (keras/TF): Trained model, either siamese for post-hoc conjoinging of single
+	- post_hoc_conjoining (bool): Besides the forward strand also print the shap values for the reverse compliment
+	- show_evo_aug_padding (bool): If evo aug padding is done, either before or in this function, this padding can be ignored in the generated logo's
+	- augment_list (list): List of possible augmentation needed for evo aug
+	- pad_samples (bool): Pad the samples with evo-aug padding
+	- pad_background (bool): Pad the background with evo-aug padding
+
+	Returns:
+	- int: Shap values of size (#samples, 2, #sequence length, 4)
+
+	"""
+	if pad_background or pad_samples:
+		robust_model = evoaug.RobustModel(loaded_model, augment_list=augment_list)
+
+	fw = samples[0]
+	rv = samples[1]
+
+	# Perform padding where necessary
+	if pad_samples:
+		fw = robust_model._pad_end(fw)
+		fw = np.expand_dims(fw, axis=3)
+
+		rv = robust_model._pad_end(rv)
+		rv = np.expand_dims(rv, axis=3)
+
+	if pad_background:
+		if post_hoc_conjoining:
+			bg = [robust_model._pad_end(dir) for dir in bg]
+			bg = [np.array(dir) for dir in bg]
+		else:
+			bg = robust_model._pad_end(bg)
+
+		
+	e = shap.DeepExplainer((loaded_model.input,loaded_model.layers[-1].output), bg)
+
+	if post_hoc_conjoining:
+		"""
+		NOTE
+		shap has to call tf.compat.v1.disable_v2_behavior() at import of tf, or it wont work. 
+		if you call this though before dl, dl wont work
+		the way my code is structured is that i cannot switch between v2 (for learning) and v1 (for interpreting)
+		this AddV2 snippet in the line under this makes the shap explainer ok to work with v2 ?? 
+		"""
+		shap.explainers._deep.deep_tf.op_handlers["AddV2"] = shap.explainers._deep.deep_tf.passthrough #https://github.com/slundberg/shap/issues/1110
+		shap_values = e.shap_values([fw, rv])
+		npshap = np.array(shap_values)
+	else:
+		shap.explainers._deep.deep_tf.op_handlers["AddV2"] = shap.explainers._deep.deep_tf.passthrough #https://github.com/slundberg/shap/issues/1110
+
+		shap_values = e.shap_values(fw)
+		npshap = np.array(shap_values)
+
+		# Make it again according to the original npshap shape in order not to have to change anything. fw and rv are now a copy of each other.
+		npshap = np.tile(npshap, (2, 1, 1, 1, 1))
+		npshap = np.expand_dims(npshap, axis=0)
+
+
+	if show_evo_aug_padding == False:
+
+		# We only want to display real nucleotides, so we calculate this range 
+		totalpadding = robust_model.insert_max
+		assert totalpadding%2 == 0, "totalpadding should be even"
+
+		half = int(totalpadding/2)
+		unpaddedlen = fw[0].shape[0]-totalpadding
+
+		# Evo aug pads on both sides
+		shap_result = [[fwshap[half:unpaddedlen+half], revshap[half:unpaddedlen+half]] for fwshap, revshap in zip(npshap[0][0], npshap[0][1])] #each npshap duo will be of shape (2(list), 300, 4, 1)
+	else:
+		shap_result = [[fwshap, revshap] for fwshap, revshap in zip(npshap[0][0], npshap[0][1])] #each npshap duo will be of shape (2(list), 300, 4, 1)
+
+	return shap_result
+
+
+def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None):
+	"""
+	Plot the SHAP values for a DNA sequence strand 
+
+	Parameters:
+	- shap_values (numpy array): Array of dimension ( #samples, 2, #sequence length, 4) containing the deepexplainer SHAP values
+	- samples (numpy array): Array of dimension ( 2, #samples, #sequence length, 4) containing the samples on which the SHAP values are based
+	- post_hoc_conjoining (bool): Besides the forward strand also print the shap values for the reverse compliment
+	- gene_ids (list): List of Gene ID's to use as plot titles
+	- fig_path (String): Path of the directory where the plots should be stored, if empty no plots will be saved.
+	- in_silico_mut (bool): Aside from the SHAP values also plot the in silico mutagenesis (this will increase the runtime drastically)
+	- model (Keras/TF): Trained model needed for the in silico mutagenesis
+
+	"""
+	# As the shap values are of shape (# samples, 2, #sequencelength, 4), we need to change the shape of the samples
+	samples = np.moveaxis(samples, 0, 1)
+
+	for i, (shap_result, sequence) in enumerate(zip(shap_values, samples)):
+
+		ntrack = 3 if in_silico_mut else 2
+		fig = plt.figure(figsize=(32,8))
+		
+		if gene_ids:
+			plt.title(f"Gene: {gene_ids[i]}")
+			fw_title = ""
+		else:
+			fw_title = "Forward_strand"
+
+		_, ax1 =plot_weights_modified(shap_result[0]*sequence[0],
+									fig,
+									ntrack,
+									1,
+									1,
+									title=fw_title, 
+									subticks_frequency=10,
+									ylab="FORWARD\nDeepExplainer",
+									)#highlight=coords #titleDictList[i]["startstop"] #,highlight={"black":[info[3] for info in titleDictList[i]["startstops"]]}
+
+		if post_hoc_conjoining:
+			_, ax2 =plot_weights_modified((shap_result[1]*sequence[1])[::-1,:],
+										fig,
+										ntrack,
+										1,
+										2,
+										title="Reverse complement",
+										subticks_frequency=10,
+										ylab="REVERSE\nDeepExplainer",
+										)
+
+		
+		if post_hoc_conjoining:
+			ax1.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
+			ax2.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
+
+		# In silico mutagenesis
+		if in_silico_mut:
+			selected_classes = ["up"]
+			
+			# Create empty numpy to contain the prediction delta for every nucleotide position
+			arrr_A = np.zeros((len(selected_classes),sequence[0].shape[0]))
+			arrr_C = np.zeros((len(selected_classes),sequence[0].shape[0]))
+			arrr_G = np.zeros((len(selected_classes),sequence[0].shape[0]))
+			arrr_T = np.zeros((len(selected_classes),sequence[0].shape[0]))
+
+			# Perform a baseline prediction for the sequence without any mutations
+			duo = [[np.expand_dims(sequence[0],2)], [np.expand_dims(sequence[1],2)]]
+			duo = [np.expand_dims(np.expand_dims(sequence[0],0),3), np.expand_dims(np.expand_dims(sequence[1],0),3)]
+			real_score = model.predict(duo)[0]			
+			
+			for mutloc in range(sequence[0].shape[0]):
+				rowohs = np.copy(sequence[0])
+
+				new_X_,new_X_RC = __mutate(rowohs, "A", mutloc)
+				#removing the lists around the input to the model, because it apparently now expects real arrays and not lists of arrays... :/
+				preda = model.predict([new_X_,new_X_RC], verbose=0)
+				arrr_A[:,mutloc]=(real_score - preda[0][0])
+
+				new_X_,new_X_RC = __mutate(rowohs, "C", mutloc)
+				arrr_C[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
+
+				new_X_,new_X_RC = __mutate(rowohs, "G", mutloc)
+				arrr_G[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
+
+				new_X_,new_X_RC = __mutate(rowohs, "T", mutloc)
+				arrr_T[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
+
+			# We only want to plot the prediction delta of possbile mutations, 
+			# we set the delta 0 to None as these are the original nucleotides present in the sequence
+			arrr_A[arrr_A==0]=None
+			arrr_C[arrr_C==0]=None
+			arrr_G[arrr_G==0]=None
+			arrr_T[arrr_T==0]=None
+
+			# Plotting for every nucleotide mutation
+			ax = fig.add_subplot(ntrack,1,3)
+			ax.scatter(range(rowohs.shape[0]),-1*arrr_A[[0]],label='A',color='green')
+			ax.scatter(range(rowohs.shape[0]),-1*arrr_C[[0]],label='C',color='blue')
+			ax.scatter(range(rowohs.shape[0]),-1*arrr_G[[0]],label='G',color='orange')
+			ax.scatter(range(rowohs.shape[0]),-1*arrr_T[[0]],label='T',color='red')
+			ax.legend()
+			ax.axhline(y=0,linestyle='--',color='gray')
+
+		if fig_path:
+			cleaned_string = re.sub(r'[^a-zA-Z0-9]', '', gene_ids[i])
+			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.png"
+			fig.savefig(full_path)
+
+		plt.show()
+
+
+def __mutate(new_X_, base, mutloc):
+	'''
+	squeezes, mutates and reexpands, makes rc
+	'''
+
+	# new_X_dm =  np.squeeze(new_X_) #(300, 4, 1) to (300, 4)
+	if base == "A":
+		new_X_[mutloc,:] = np.array([1, 0, 0, 0], dtype='int8')
+	elif base == "C":
+		new_X_[mutloc,:] = np.array([0, 1, 0, 0], dtype='int8')
+	elif base == "G":
+		new_X_[mutloc,:] = np.array([0, 0, 1, 0], dtype='int8')
+	elif base == "T":
+		new_X_[mutloc,:] = np.array([0, 0, 0, 1], dtype='int8')
+
+	new_X_dm_expand = np.expand_dims(new_X_, axis=2) #(300, 4) to (300, 4, 1) 
+
+	new_X_dm_expand_RC = new_X_dm_expand[::-1,::-1,:] #(300, 4, 1) 
+
+	#expand once more, after not working with the v1 compatibility anymore.... 
+	new_X_dm_expand_expand = np.expand_dims(new_X_dm_expand, axis=0) #(300, 4, 1) to (1, 300, 4, 1)
+	new_X_dm_expand_RC_expand = np.expand_dims(new_X_dm_expand_RC, axis=0) #(300, 4, 1) to (1, 300, 4, 1)
+
+	return new_X_dm_expand_expand, new_X_dm_expand_RC_expand
+

@@ -1,0 +1,6 @@
+# Ignore Python cache files
+src/__pycache__/
+*.py[cod]
+
+# Ignore PNG image files
+*.png
