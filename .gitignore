@@ -2,5 +2,14 @@
 src/__pycache__/
 *.py[cod]
 
+# Ignore Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore Jupyter lab log file
+log.file
+
 # Ignore PNG image files
 *.png
+
+# Ignore SLURM output
+slurm*.out
