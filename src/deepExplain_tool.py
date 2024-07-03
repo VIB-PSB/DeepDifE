@@ -77,10 +77,10 @@ def deepExplain(samples, loaded_model, bg, post_hoc_conjoining=False, show_evo_a
 	# Perform padding where necessary
 	if pad_samples:
 		fw = robust_model._pad_end(fw)
-		fw = np.expand_dims(fw, axis=3)
-
 		rv = robust_model._pad_end(rv)
-		rv = np.expand_dims(rv, axis=3)
+
+		fw = np.array(fw)
+		rv = np.array(rv)
 
 	if pad_background:
 		if post_hoc_conjoining:
@@ -88,7 +88,6 @@ def deepExplain(samples, loaded_model, bg, post_hoc_conjoining=False, show_evo_a
 			bg = [np.array(dir) for dir in bg]
 		else:
 			bg = robust_model._pad_end(bg)
-
 		
 	e = shap.DeepExplainer((loaded_model.input,loaded_model.layers[-1].output), bg)
 
