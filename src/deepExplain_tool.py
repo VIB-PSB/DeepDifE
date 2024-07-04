@@ -236,8 +236,8 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 			cleaned_string = re.sub(r'[^a-zA-Z0-9]', '', gene_ids[i])
 			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.png"
 			fig.savefig(full_path)
-
-		plt.show()
+		else:
+			plt.show()
 
 
 def __mutate(new_X_, base, mutloc):
