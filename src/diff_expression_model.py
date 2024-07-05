@@ -77,64 +77,49 @@ def get_tf_model(input_shape, kernel_size, number_of_convolutions, perform_max_p
 	return model    
 
 
-def get_model(evoaug_input_shape=(600,4),
+def get_model(input_shape=(600,4),
 				perform_evoaug=True,
+				augment_list=[],
 				finetune=False,
 				learning_rate=0.001,
 				kernel_size=(12,4),
 				number_of_convolutions=3,
 				perform_max_pooling=False, 
 				second_convolution=6):
-	augment_list = [
-		augment.RandomRC(rc_prob=0.5),
-		augment.RandomInsertionBatch(insert_min=0, insert_max=20),
-		augment.RandomDeletion(delete_min=0, delete_max=30),
-		augment.RandomTranslocationBatch(shift_min=0, shift_max=20),
-		augment.RandomMutation(mutate_frac=0.05),
-		augment.RandomNoise()
-	]
+
 
 	if perform_evoaug:
 		optimizer = Adam(learning_rate=learning_rate)
-		# early stopping callback
-		earlyStopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-													patience=20,
-													verbose=1,
-													mode='min',
-													restore_best_weights=True)
-		# reduce learning rate callback
-		reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
-														factor=0.1,
-														patience=5,
-														min_lr=1e-7,
-														mode='min',
-														verbose=1)
+
 		if finetune:
 			optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-			# early stopping callback
-			es_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-														patience=5,
-														verbose=1,
-														mode='min',
-														restore_best_weights=True)
+	else:
+		pass
 
-			# reduce learning rate callback
-			reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
-															factor=0.1,
-															patience=3,
-															min_lr=1e-7,
-															mode='min',
-															verbose=1)
-	else:
-		# TODO
-		print("not yet implementd")
+
 	if perform_evoaug:
-		model = evoaug.RobustModel(get_tf_model, kernel_size=kernel_size, number_of_convolutions=number_of_convolutions, input_shape=evoaug_input_shape, perform_max_pooling=perform_max_pooling, second_convolution=second_convolution, augment_list=augment_list, max_augs_per_seq=2, hard_aug=True)
+		model = evoaug.RobustModel(get_tf_model, 
+					kernel_size=kernel_size, 
+					number_of_convolutions=number_of_convolutions, 
+					input_shape=input_shape, 
+					perform_max_pooling=perform_max_pooling, 
+					second_convolution=second_convolution, 
+					augment_list=augment_list, 
+					max_augs_per_seq=2, 
+					hard_aug=True)
 		if finetune:
-			model = evoaug.RobustModel(get_tf_model, kernel_size=kernel_size, number_of_convolutions=number_of_convolutions, input_shape=evoaug_input_shape, perform_max_pooling=perform_max_pooling, second_convolution=second_convolution, augment_list=augment_list, max_augs_per_seq=1, hard_aug=True)
+			model = evoaug.RobustModel(get_tf_model, 
+							kernel_size=kernel_size, 
+							number_of_convolutions=number_of_convolutions, 
+							input_shape=input_shape, 
+							perform_max_pooling=perform_max_pooling, 
+							second_convolution=second_convolution, 
+							augment_list=augment_list, 
+							max_augs_per_seq=1, 
+							hard_aug=True)
 	else:
-		model = get_tf_model(evoaug_input_shape)
+		model = get_tf_model(input_shape)
 
 	# Compile model
 	model.compile(optimizer = optimizer,
@@ -182,10 +167,10 @@ def get_siamese_model(model):
 											outputs=[sigmoid_out])
 	return siamese_model
 
-def post_hoc_conjoining(siamese_model, X_test_fw, X_test_rv):
-	# X_test_rv = reverse_compliment(X_test_fw)
 
-	prediction = siamese_model.predict([X_test_fw, X_test_rv])
+def post_hoc_conjoining(siamese_model, x_fw, x_rc):
+
+	prediction = siamese_model.predict([x_fw, x_rc])
 	predicted_categories = []
 
 	for i, pr in enumerate(prediction):
