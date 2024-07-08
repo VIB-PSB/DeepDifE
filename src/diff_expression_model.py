@@ -76,27 +76,17 @@ def get_tf_model(input_shape, kernel_size, number_of_convolutions, perform_max_p
 
 	return model    
 
-
+# TODO clean this up, a lot of these conditional statement can be removed
 def get_model(input_shape=(600,4),
 				perform_evoaug=True,
 				augment_list=[],
-				finetune=False,
 				learning_rate=0.001,
 				kernel_size=(12,4),
 				number_of_convolutions=3,
 				perform_max_pooling=False, 
 				second_convolution=6):
 
-
-	if perform_evoaug:
-		optimizer = Adam(learning_rate=learning_rate)
-
-		if finetune:
-			optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-
-	else:
-		pass
-
+	optimizer = Adam(learning_rate=learning_rate)
 
 	if perform_evoaug:
 		model = evoaug.RobustModel(get_tf_model, 
@@ -108,18 +98,12 @@ def get_model(input_shape=(600,4),
 					augment_list=augment_list, 
 					max_augs_per_seq=2, 
 					hard_aug=True)
-		if finetune:
-			model = evoaug.RobustModel(get_tf_model, 
-							kernel_size=kernel_size, 
-							number_of_convolutions=number_of_convolutions, 
-							input_shape=input_shape, 
-							perform_max_pooling=perform_max_pooling, 
-							second_convolution=second_convolution, 
-							augment_list=augment_list, 
-							max_augs_per_seq=1, 
-							hard_aug=True)
 	else:
-		model = get_tf_model(input_shape)
+		model = get_tf_model(kernel_size=kernel_size, 
+					number_of_convolutions=number_of_convolutions, 
+					input_shape=input_shape, 
+					perform_max_pooling=perform_max_pooling, 
+					second_convolution=second_convolution)
 
 	# Compile model
 	model.compile(optimizer = optimizer,
