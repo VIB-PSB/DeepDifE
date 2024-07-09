@@ -112,8 +112,7 @@ def get_model(input_shape=(600,4),
 					'acc',
 					AUC(name= "auROC", curve="ROC"),
 					AUC(name = "auPRC", curve="PR"),
-					tf.keras.metrics.TruePositives(),
-					tf.keras.metrics.AUC(curve='ROC', name='auroc'),
+					tf.keras.metrics.TruePositives()
 				]
 	)
 
