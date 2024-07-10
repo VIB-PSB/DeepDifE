@@ -17,39 +17,38 @@ from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.models import model_from_json
 
 import numpy as np
+import math
 from sklearn import metrics
 
 
 
-def get_tf_model(input_shape, kernel_size, number_of_convolutions, perform_max_pooling, second_convolution):
+def get_tf_model(input_shape, kernel_size, number_of_convolutions, number_of_filters):
 
 	len_seq = input_shape[0]
 	prm = {
-	"batch": 256,
-	"conv": [
-		64,
-		64,
-		32
-	],
-	"dense": 256,
-	"dropout": 0.25,
-	"epochs": 100,
-	"maxPool": [
-		6,
-		6,
-		6
-	],
-	"num_bloks": 3,
-	"regularizer": 1e-06,
-	"wind_size": [
-		12,
-		6,
-		6
-	]
+		"conv": [
+			64,
+			64,
+			32
+		],
+		"dense": 256,
+		"dropout": 0.25,
+		"epochs": 100,
+		"maxPool": [
+			6,
+			6,
+			6
+		],
+		"num_bloks": 3,
+		"regularizer": 1e-06,
+		"wind_size": [
+			12,
+			6,
+			6
+		]
 	}
-	
 	model = Sequential()
-	model.add(Conv2D(filters = prm['conv'][0],
+	model.add(Conv2D(filters = number_of_filters,
 								kernel_size = kernel_size, #"wind_size": [12, 6, 6] (shrikumar onehot order reverses this)
 								activation = 'relu',
 								kernel_regularizer = regularizers.l2(prm['regularizer']),
@@ -60,11 +59,11 @@ def get_tf_model(input_shape, kernel_size, number_of_convolutions, perform_max_p
 	model.add(Dropout(prm['dropout']))
 
 	for i in range(1, number_of_convolutions):
-		model.add(Conv2D(filters = prm['conv'][i],
-							kernel_size=(prm['wind_size'][i],1),
+		model.add(Conv2D(filters = (number_of_filters / int(math.pow(2,(i-1)))),
+							kernel_size=(6,1),
 							activation='relu',
 							kernel_regularizer=regularizers.l2(prm['regularizer']),
-							strides=(prm['wind_size'][i],1),
+							strides=(6,1),
 							padding='same'))
 		model.add(Dropout(prm['dropout']))
 
@@ -83,8 +82,7 @@ def get_model(input_shape=(600,4),
 				learning_rate=0.001,
 				kernel_size=(12,4),
 				number_of_convolutions=3,
-				perform_max_pooling=False, 
-				second_convolution=6):
+				number_of_filters=64):
 
 	optimizer = Adam(learning_rate=learning_rate)
 
@@ -93,17 +91,15 @@ def get_model(input_shape=(600,4),
 					kernel_size=kernel_size, 
 					number_of_convolutions=number_of_convolutions, 
 					input_shape=input_shape, 
-					perform_max_pooling=perform_max_pooling, 
-					second_convolution=second_convolution, 
-					augment_list=augment_list, 
+					augment_list=augment_list,
+					number_of_filters=number_of_filters,
 					max_augs_per_seq=2, 
 					hard_aug=True)
 	else:
 		model = get_tf_model(kernel_size=kernel_size, 
 					number_of_convolutions=number_of_convolutions, 
-					input_shape=input_shape, 
-					perform_max_pooling=perform_max_pooling, 
-					second_convolution=second_convolution)
+					input_shape=input_shape,
+					number_of_filters=number_of_filters)
 
 	# Compile model
 	model.compile(optimizer = optimizer,
