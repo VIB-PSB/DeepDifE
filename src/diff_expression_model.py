@@ -84,8 +84,6 @@ def get_model(input_shape=(600,4),
 				number_of_convolutions=3,
 				number_of_filters=64):
 
-	optimizer = Adam(learning_rate=learning_rate)
-
 	if perform_evoaug:
 		model = evoaug.RobustModel(get_tf_model, 
 					kernel_size=kernel_size, 
@@ -102,6 +100,12 @@ def get_model(input_shape=(600,4),
 					number_of_filters=number_of_filters)
 
 	# Compile model
+	model = compile_model(model, learning_rate=learning_rate)
+	return model
+
+
+def compile_model(model, learning_rate=0.001):
+	optimizer = Adam(learning_rate=learning_rate)
 	model.compile(optimizer = optimizer,
 				loss = 'binary_crossentropy',
 				metrics=[
@@ -113,6 +117,7 @@ def get_model(input_shape=(600,4),
 	)
 
 	return model
+
 
 def load_model(model_path, weights_path):
 	'''
