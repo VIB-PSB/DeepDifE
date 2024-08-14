@@ -120,7 +120,7 @@ def create_ortholog_lookup_table():
 
 
 def get_phylo_aug_data(dataset, max_distance=1000, include_accessions=True):
-	phylo_augmentation_base_path = "/home/ubuntu/DeepDifE/data/phylo_aug/fastas/"
+	phylo_augmentation_base_path = "/home/ubuntu/DeepDifE/data/phylo_aug/fasta/"
 
 	accessions_fasta_files = {
 				"ath-an1":"ath-an1.tss.fasta",
@@ -202,79 +202,88 @@ def main():
 	dataset = dataset[["geneID", "Category", "GeneFamily", "seqs"]]
 	dataset.rename(columns={"geneID":"GeneID", "Category":"Label", "seqs": "Sequence"}, inplace=True)
 
-	for max_phylo_distance in range(5, 8):
-			for rate in range(0, 10):
-				for rerun in range(0, 10):
-					augmentation_rate = rate / 10
-					BATCH_SIZE = 100
+	for max_phylo_distance in range(4,6):
+		for rate in range(0, 10):
+			for rerun in range(0, 10):
+				augmentation_rate = rate / 10
+				BATCH_SIZE = 100
 
-					phylo_aug_df = get_phylo_aug_data(dataset, max_phylo_distance, include_accessions=False)
+				phylo_aug_df = get_phylo_aug_data(dataset, max_phylo_distance, include_accessions=True)
 
-					dataset["One_hot_encoded"] = one_hot_encode_series(dataset["Sequence"])
-					phylo_aug_df["One_hot_encoded"] = one_hot_encode_series(phylo_aug_df["Sequence"])
+				dataset["One_hot_encoded"] = one_hot_encode_series(dataset["Sequence"])
+				phylo_aug_df["One_hot_encoded"] = one_hot_encode_series(phylo_aug_df["Sequence"])
 
-					dataset["RC_one_hot_encoded"] = reverse_complement_series(dataset["One_hot_encoded"])
-					phylo_aug_df["RC_one_hot_encoded"] = reverse_complement_series(phylo_aug_df["One_hot_encoded"])
+				dataset["RC_one_hot_encoded"] = reverse_complement_series(dataset["One_hot_encoded"])
+				phylo_aug_df["RC_one_hot_encoded"] = reverse_complement_series(phylo_aug_df["One_hot_encoded"])
 
-					phylo_aug_df = phylo_aug_df[phylo_aug_df["GeneFamily"].notna()]
+				phylo_aug_df = phylo_aug_df[phylo_aug_df["GeneFamily"].notna()]
 
-					train_df, validation_test_df = grouped_shuffle_split(dataset, dataset["GeneFamily"], 0.2)
-					validation_df, test_df  = grouped_shuffle_split(validation_test_df, validation_test_df["GeneFamily"], 0.5)
+				train_df, validation_test_df = grouped_shuffle_split(dataset, dataset["GeneFamily"], 0.2)
+				validation_df, test_df  = grouped_shuffle_split(validation_test_df, validation_test_df["GeneFamily"], 0.5)
 
-					print(f"Length of training set: {train_df.shape[0]}")
-					print(f"Length of validation set: {validation_df.shape[0]}")
-					print(f"Length of test set: {test_df.shape[0]}")
+				print(f"Length of training set: {train_df.shape[0]}")
+				print(f"Length of validation set: {validation_df.shape[0]}")
+				print(f"Length of test set: {test_df.shape[0]}")
 
-					filtered_phylo_aug_df = phylo_aug_df[~phylo_aug_df["Ortholog"].isin(validation_test_df["GeneID"])]
+				filtered_phylo_aug_df = phylo_aug_df[~phylo_aug_df["Ortholog"].isin(validation_test_df["GeneID"])]
 
-					x_validation, y_validation = get_input_and_labels(validation_df)
+				x_validation, y_validation = get_input_and_labels(validation_df)
 
-					train_data_gen = data_gen(train_df,filtered_phylo_aug_df, BATCH_SIZE, True, augmentation_rate)
+				train_data_gen = data_gen(train_df,filtered_phylo_aug_df, BATCH_SIZE, True, augmentation_rate)
 
-					input_shape = train_df["One_hot_encoded"].iloc[0].shape
-					model = get_model(input_shape=input_shape, perform_evoaug=False,learning_rate=0.001)
+				input_shape = train_df["One_hot_encoded"].iloc[0].shape
+				model = get_model(input_shape=input_shape, perform_evoaug=False,learning_rate=0.001)
 
-					# early stopping callback
+				# early stopping callback
 
-					early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-																patience=40,
-																verbose=1,
+				early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+															patience=40,
+															verbose=1,
+															mode='min',
+															restore_best_weights=True)
+				# reduce learning rate callback
+				reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
+																factor=0.1,
+																patience=5,
+																min_lr=1e-7,
 																mode='min',
-																restore_best_weights=True)
-					# reduce learning rate callback
-					reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
-																	factor=0.1,
-																	patience=5,
-																	min_lr=1e-7,
-																	mode='min',
-																	verbose=1)
-					callbacks = [early_stopping_callback, reduce_lr]
+																verbose=1)
+				callbacks = [early_stopping_callback, reduce_lr]
 
-					model.fit(train_data_gen,
-								steps_per_epoch=math.ceil(
-									train_df.shape[0] / BATCH_SIZE),
-								epochs=100,
+				model.fit(train_data_gen,
+							steps_per_epoch=math.ceil(
+								train_df.shape[0] / BATCH_SIZE),
+							epochs=100,
+							validation_data=(x_validation, y_validation),
+							callbacks=callbacks
+							)
+				scores = model.evaluate(x_validation, y_validation, verbose=0)
+
+				x_train_pure, y_train_pure = get_input_and_labels(train_df)
+
+				# set up callbacks
+				model = compile_model(model, learning_rate=0.0001)
+
+				# train model
+				model.fit(x_train_pure, y_train_pure,
+								epochs=10,
+								batch_size=100,
+								shuffle=True,
 								validation_data=(x_validation, y_validation),
-								callbacks=callbacks
-								)
-					scores = model.evaluate(x_validation, y_validation, verbose=0)
+								callbacks=[early_stopping_callback])
 
-					x_train_pure, y_train_pure = get_input_and_labels(train_df)
+				val_scores = model.evaluate(x_validation, y_validation, verbose=0)
 
-					# set up callbacks
-					model = compile_model(model, learning_rate=0.0001)
+				siamese_model = get_siamese_model(model)
 
-					# train model
-					model.fit(x_train_pure, y_train_pure,
-									epochs=10,
-									batch_size=100,
-									shuffle=True,
-									validation_data=(x_validation, y_validation),
-									callbacks=[early_stopping_callback])
+				x_test = np.stack(test_df["One_hot_encoded"])
+				x_test_rc = np.stack(test_df["RC_one_hot_encoded"])
+				y_test = test_df["Label"].to_numpy()
+				predictions_categories, predictions = post_hoc_conjoining(siamese_model, x_test, x_test_rc)
+				test_auroc = get_auroc(y_test, predictions)
 
-					scores = model.evaluate(x_validation, y_validation, verbose=0)
-					f = open("/home/ubuntu/DeepDifE/data/phylo_aug/results/result_distribution_rate_distance2.csv", "a")
-					f.write(f'{max_phylo_distance},{augmentation_rate},{scores[0]},{scores[1]},{scores[2]},{scores[3]},{scores[4]}\n')
-					f.close()
+				f = open("/home/ubuntu/DeepDifE/data/phylo_aug/results/result_distribution_limited_config_with_test.csv", "a")
+				f.write(f'{max_phylo_distance},{augmentation_rate},{val_scores[0]},{val_scores[1]},{val_scores[2]},{val_scores[3]},{val_scores[4]},{test_auroc}\n')
+				f.close()
 if __name__=="__main__":
 	main()

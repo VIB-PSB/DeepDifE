@@ -51,13 +51,14 @@ def getDeepExplainerBackground(background_samples, shuffle, post_hoc_conjoining)
 	return bg
 
 
-def deepExplain(samples, loaded_model, bg, post_hoc_conjoining=False, show_evo_aug_padding=False, augment_list=[], pad_samples=False, pad_background=False):
+def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=False, show_evo_aug_padding=False, augment_list=[], pad_samples=False, pad_background=False):
 	"""
 	Run deepexplainer based on the provided sequences based on a Tensorflow model and a background
 
 	Parameters:
 	- samples (numpy array): Array of dimension (2, #samples, #sequence length, 4)
 	- loaded_model (keras/TF): Trained model, either siamese for post-hoc conjoinging of single
+	- evo_aug (bool): Indicate if the loaded model performs evo aug
 	- post_hoc_conjoining (bool): Besides the forward strand also print the shap values for the reverse compliment
 	- show_evo_aug_padding (bool): If evo aug padding is done, either before or in this function, this padding can be ignored in the generated logo's
 	- augment_list (list): List of possible augmentation needed for evo aug
@@ -82,13 +83,16 @@ def deepExplain(samples, loaded_model, bg, post_hoc_conjoining=False, show_evo_a
 		fw = np.array(fw)
 		rv = np.array(rv)
 
+	# Prepare background
 	if pad_background:
 		if post_hoc_conjoining:
 			bg = [robust_model._pad_end(dir) for dir in bg]
 			bg = [np.array(dir) for dir in bg]
 		else:
 			bg = robust_model._pad_end(bg)
-		
+	elif post_hoc_conjoining:
+		bg = [np.array(dir) for dir in bg]
+
 	e = shap.DeepExplainer((loaded_model.input,loaded_model.layers[-1].output), bg)
 
 	if post_hoc_conjoining:
@@ -112,8 +116,8 @@ def deepExplain(samples, loaded_model, bg, post_hoc_conjoining=False, show_evo_a
 		npshap = np.tile(npshap, (2, 1, 1, 1, 1))
 		npshap = np.expand_dims(npshap, axis=0)
 
-
-	if show_evo_aug_padding == False:
+	
+	if show_evo_aug_padding == False and evo_aug == True:
 
 		# We only want to display real nucleotides, so we calculate this range 
 		totalpadding = robust_model.insert_max
@@ -152,7 +156,7 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 		ntrack = 3 if in_silico_mut else 2
 		fig = plt.figure(figsize=(32,8))
 		
-		if gene_ids:
+		if len(gene_ids):
 			plt.title(f"Gene: {gene_ids[i]}")
 			fw_title = ""
 		else:

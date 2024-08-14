@@ -104,8 +104,8 @@ def get_model(input_shape=(600,4),
 	return model
 
 
-def compile_model(model, learning_rate=0.001):
-	optimizer = Adam(learning_rate=learning_rate)
+def compile_model(model, learning_rate=0.001, weight_decay=None):
+	optimizer = Adam(learning_rate=learning_rate, weight_decay=weight_decay)
 	model.compile(optimizer = optimizer,
 				loss = 'binary_crossentropy',
 				metrics=[
