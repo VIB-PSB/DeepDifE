@@ -56,8 +56,8 @@ def reverse_complement_series(data_series):
 	return reverse_complement
 
 
-def grouped_shuffle_split(dataset, groups, test_train_ratio):
-	groupSplitter = GroupShuffleSplit(test_size=test_train_ratio, n_splits=1, random_state = 42)
+def grouped_shuffle_split(dataset, groups, test_train_ratio, random_state=42):
+	groupSplitter = GroupShuffleSplit(test_size=test_train_ratio, n_splits=1, random_state=random_state)
 	train_idx = list(groupSplitter.split(dataset, groups=groups))[0][0]
 	test_idx = list(groupSplitter.split(dataset, groups=groups))[0][1]
 
