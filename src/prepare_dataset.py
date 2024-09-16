@@ -4,7 +4,10 @@ from Bio import SeqIO
 from sklearn.model_selection import GroupShuffleSplit
 
 def __one_hot_encode_nucleotide(nucleotide):
-	"""One-hot encode a single nucleotide."""
+	"""
+	One-hot encode a single nucleotide. This one-hot-encoding can not be changed as 
+	it will disturb the symmetrie needed by the reverse complement creation
+	"""
 	mapping = {'A': [1, 0, 0, 0],
 			   'C': [0, 1, 0, 0],
 			   'G': [0, 0, 1, 0],
@@ -32,13 +35,10 @@ def one_hot_encode_series(data_series):
 
 
 def reverse_complement_sequence(sequence):
-	complement_map = np.array([
-		[0, 0, 0, 1],  # A -> T
-		[0, 0, 1, 0],  # C -> G
-		[0, 1, 0, 0],  # G -> C
-		[1, 0, 0, 0],  # T -> A
-	])
-	reverse_complement_one_hot = complement_map[np.argmax(sequence, axis=1)][::-1]
+	"""
+	Flip the array over both axes. This highly depends on the symmetry of the ACGT one-hot-encoding
+	"""
+	reverse_complement_one_hot = np.flip(sequence)
 	return reverse_complement_one_hot
 
 
