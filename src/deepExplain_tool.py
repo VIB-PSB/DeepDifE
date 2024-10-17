@@ -15,7 +15,7 @@ import pickle
 from random import sample
 from random import sample
 from evoaug_tf import evoaug
-from src.logo_plot_utils import plot_weights_modified
+from DeepDifE.src.logo_plot_utils import plot_weights_modified
 
 
 
@@ -51,16 +51,18 @@ def getDeepExplainerBackground(background_samples, shuffle, post_hoc_conjoining)
 	return bg
 
 
-def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=False, show_evo_aug_padding=False, augment_list=[], pad_samples=False, pad_background=False):
+def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=False, remove_evo_aug_padding=False, augment_list=[], pad_samples=False, pad_background=False):
 	"""
 	Run deepexplainer based on the provided sequences based on a Tensorflow model and a background
+	To determine if the samples or background need to be padded follow this rule of thumb:
+	If your model was trained using evo aug make sure both background and samples are padded.
 
 	Parameters:
 	- samples (numpy array): Array of dimension (2, #samples, #sequence length, 4)
 	- loaded_model (keras/TF): Trained model, either siamese for post-hoc conjoinging of single
 	- evo_aug (bool): Indicate if the loaded model performs evo aug
 	- post_hoc_conjoining (bool): Besides the forward strand also print the shap values for the reverse compliment
-	- show_evo_aug_padding (bool): If evo aug padding is done, either before or in this function, this padding can be ignored in the generated logo's
+	- remove_evo_aug_padding (bool): If evo aug padding is done, either before or in this function, this padding can be ignored in the generated logo's
 	- augment_list (list): List of possible augmentation needed for evo aug
 	- pad_samples (bool): Pad the samples with evo-aug padding
 	- pad_background (bool): Pad the background with evo-aug padding
@@ -69,7 +71,7 @@ def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=Fa
 	- int: Shap values of size (#samples, 2, #sequence length, 4)
 
 	"""
-	if pad_background or pad_samples:
+	if pad_background or pad_samples or remove_evo_aug_padding:
 		robust_model = evoaug.RobustModel(loaded_model, augment_list=augment_list)
 
 	fw = samples[0]
@@ -117,12 +119,12 @@ def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=Fa
 		npshap = np.expand_dims(npshap, axis=0)
 
 	
-	if show_evo_aug_padding == False and evo_aug == True:
+	if remove_evo_aug_padding:
 
 		# We only want to display real nucleotides, so we calculate this range 
 		totalpadding = robust_model.insert_max
 		assert totalpadding%2 == 0, "totalpadding should be even"
-
+		print("removing padding")
 		half = int(totalpadding/2)
 		unpaddedlen = fw[0].shape[0]-totalpadding
 
@@ -136,7 +138,7 @@ def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=Fa
 
 def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None):
 	"""
-	Plot the SHAP values for a DNA sequence strand 
+	Plot the SHAP values for a list DNA sequence strands.
 
 	Parameters:
 	- shap_values (numpy array): Array of dimension ( #samples, 2, #sequence length, 4) containing the deepexplainer SHAP values
@@ -152,96 +154,278 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 	samples = np.moveaxis(samples, 0, 1)
 
 	for i, (shap_result, sequence) in enumerate(zip(shap_values, samples)):
-
-		ntrack = 3 if in_silico_mut else 2
-		fig = plt.figure(figsize=(32,8))
-		
 		if len(gene_ids):
-			plt.title(f"Gene: {gene_ids[i]}")
-			fw_title = ""
+			gene_and_coordinates = gene_ids[i]
 		else:
-			fw_title = "Forward_strand"
+			gene_and_coordinates = ""
+		
+		if fig_path:
+			cleaned_string = re.sub(r'[^a-zA-Z0-9]', '_', gene_and_coordinates)
+			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.png"
+		else:
+			full_path = fig_path
+		
+		# Find indices of padding
+		matching_indices = np.where(np.all(sequence[0] == [0, 0, 0, 0], axis=1))[0]
 
-		_, ax1 =plot_weights_modified(shap_result[0]*sequence[0],
+		if len(matching_indices) > 0:
+			if matching_indices[0] > 0:
+				# In case the padding is on the right
+				start = 0
+				stop = matching_indices[0]
+			else:
+				# In case the padding is on the left
+				start = matching_indices[-1] + 1
+				stop = len(sequence[0])
+		else:
+			# In case the padding there is no padding
+			start = 0
+			stop = len(sequence[0])
+		
+		__plot_saliency_map(shap_result=shap_result, 
+					  		sequence=sequence, 
+							start=start, 
+							stop=stop, 
+							post_hoc_conjoining=post_hoc_conjoining, 
+							gene_and_coordinates=gene_and_coordinates, 
+							full_path=full_path, 
+							in_silico_mut=in_silico_mut, 
+							model=model)
+
+
+def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None, stride=500):
+	"""
+	Plot the SHAP values for a list of DNA sequence strands. For every sequence, both a complete saliency map will be plot as also 
+	a series of sliding window saliency maps. For larger sequences this provides a way to have a more detailed overview of the SHAP values.
+
+	Parameters:
+	- shap_values (numpy array): Array of dimension ( #samples, 2, #sequence length, 4) containing the deepexplainer SHAP values
+	- samples (numpy array): Array of dimension ( 2, #samples, #sequence length, 4) containing the samples on which the SHAP values are based
+	- post_hoc_conjoining (bool): Besides the forward strand also print the shap values for the reverse compliment
+	- gene_ids (list): List of Gene ID's to use as plot titles
+	- fig_path (String): Path of the directory where the plots should be stored, if empty no plots will be saved.
+	- in_silico_mut (bool): Aside from the SHAP values also plot the in silico mutagenesis (this will increase the runtime drastically)
+	- model (Keras/TF): Trained model needed for the in silico mutagenesis
+	- string (int): Stride used for the sliding window.
+
+	"""
+	# As the shap values are of shape (# samples, 2, #sequencelength, 4), we need to change the shape of the samples
+	samples = np.moveaxis(samples, 0, 1)
+	
+	for i, (shap_result, sequence) in enumerate(zip(shap_values, samples)):
+
+		# Find indices of padding
+		matching_indices = np.where(np.all(sequence[0] == [0, 0, 0, 0], axis=1))[0]
+
+		if len(matching_indices) > 0:
+			if matching_indices[0] > 0:
+				# In case the padding is on the right
+				start_offset = 0
+				stop_offset = matching_indices[0]
+			else:
+				# In case the padding is on the left
+				start_offset = matching_indices[-1] + 1
+				stop_offset = len(sequence[0])
+		else:
+			# In case the padding there is no padding
+			start_offset = 0
+			stop_offset = len(sequence[0])
+		
+		coordinates_included = False
+		gene_id_short = ""
+		chromosome = ""
+		strand = ""
+		coordinate_start = 0
+
+		if len(gene_ids):
+			pattern = re.compile('([^::]*)::([^:]*):([^-]*)-([^\(]*)(.*)')
+			gene_id = gene_ids[i]
+
+			if(pattern.match(gene_id)):
+				title_search = pattern.search(gene_id)
+				gene_id_short = title_search.group(1)
+				chromosome = title_search.group(2)
+				coordinate_start = int(title_search.group(3))
+				strand = title_search.group(5)
+				coordinates_included = True
+			else:
+				gene_id_short = re.sub(r'[^a-zA-Z0-9]', '_', gene_id)
+				coordinates_included = False
+
+		
+		# Create subdirectory
+		os.mkdir(f"{fig_path}/{gene_id_short}")
+		fig_subpath = f"{fig_path}/{gene_id_short}"
+
+		# Plot whole saliency map
+		full_path = __get_filename(gene_ids[i], fig_subpath, add_full_postfix=True)
+		__plot_saliency_map(shap_result=shap_result,
+					  		sequence=sequence,
+							start_offset=start_offset,
+							stop_offset=stop_offset,
+							post_hoc_conjoining=post_hoc_conjoining,
+							gene_and_coordinates=gene_ids[i],
+							full_path=full_path,
+							in_silico_mut=in_silico_mut,
+							model=model)
+
+		# Plot in chunked saliency map
+		while(start_offset + stride < stop_offset):
+			gene_and_coordinates = __get_gene_and_coordinate_name(
+										coordinates_included=coordinates_included, 
+										gene_id_short=gene_id_short, 
+										chromosome=chromosome, 
+										coordinate_start=coordinate_start, 
+										start_offset=start_offset, 
+										stop_offset=start_offset+stride, 
+										strand=strand)
+									
+			full_path = __get_filename(gene_and_coordinates, fig_subpath)
+			__plot_saliency_map(shap_result=shap_result,
+					   			sequence=sequence,
+								start_offset=start_offset,
+								stop_offset=start_offset + stride,
+								post_hoc_conjoining=post_hoc_conjoining,
+								gene_and_coordinates=gene_and_coordinates,
+								full_path=full_path,
+								in_silico_mut=in_silico_mut, 
+								model=model)
+			start_offset = start_offset + stride
+
+		# Plot the remaining part of the sequence
+		gene_and_coordinates = __get_gene_and_coordinate_name(
+										coordinates_included=coordinates_included, 
+										gene_id_short=gene_id_short, 
+										chromosome=chromosome, 
+										coordinate_start=coordinate_start, 
+										start_offset=start_offset, 
+										stop_offset=stop_offset, 
+										strand=strand)
+		full_path = __get_filename(gene_and_coordinates, fig_subpath)
+		__plot_saliency_map(shap_result=shap_result, 
+					  		sequence=sequence, 
+							start_offset=start_offset, 
+							stop_offset=stop_offset, 
+							post_hoc_conjoining=post_hoc_conjoining, 
+							gene_and_coordinates=gene_and_coordinates, 
+							full_path=full_path, 
+							in_silico_mut=in_silico_mut, 
+							model=model)
+
+
+def __get_gene_and_coordinate_name(coordinates_included, gene_id_short, chromosome="", coordinate_start=0, start_offset=0, stop_offset=1, strand=""):
+	"""
+	Create gene id string with coordinates. 
+	"""
+	if coordinates_included:
+		gene_and_coordinates = f"{gene_id_short}::{chromosome}:{coordinate_start + start_offset}-{coordinate_start + stop_offset}{strand}"
+	else:
+		gene_and_coordinates = f"{gene_id_short}_{str(start_offset)}_{str(stop_offset)}"
+	return gene_and_coordinates
+
+
+def __get_filename(gene_and_coordinates, fig_path, add_full_postfix=False):
+	"""
+	Create filename if necessary. 
+	"""
+	if fig_path:
+		if(add_full_postfix):
+			full_path = f"{fig_path}/{gene_and_coordinates}_full.png"
+		else:
+			full_path = f"{fig_path}/{gene_and_coordinates}.png"
+	else:
+		full_path = fig_path
+
+	return full_path
+
+
+def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_hoc_conjoining, gene_and_coordinates, full_path, in_silico_mut, model):
+	ntrack = 3 if in_silico_mut else 2
+	fig = plt.figure(figsize=(32,8))
+	
+	if gene_and_coordinates:
+		plt.title(f"Gene: {gene_and_coordinates}")
+		fw_title = ""
+	else:
+		fw_title = "Forward_strand"
+	_, ax1 =plot_weights_modified((shap_result[0]*sequence[0])[start_offset:stop_offset,:],
+								fig,
+								ntrack,
+								1,
+								1,
+								title=fw_title, 
+								subticks_frequency=10,
+								ylab="FORWARD\nDeepExplainer",
+								)#highlight=coords #titleDictList[i]["startstop"] #,highlight={"black":[info[3] for info in titleDictList[i]["startstops"]]}
+
+	if post_hoc_conjoining:
+		_, ax2 =plot_weights_modified(((shap_result[1]*sequence[1])[::-1,:][start_offset:stop_offset,:]),
 									fig,
 									ntrack,
 									1,
-									1,
-									title=fw_title, 
+									2,
+									title="Reverse complement",
 									subticks_frequency=10,
-									ylab="FORWARD\nDeepExplainer",
-									)#highlight=coords #titleDictList[i]["startstop"] #,highlight={"black":[info[3] for info in titleDictList[i]["startstops"]]}
+									ylab="REVERSE\nDeepExplainer",
+									)
 
-		if post_hoc_conjoining:
-			_, ax2 =plot_weights_modified((shap_result[1]*sequence[1])[::-1,:],
-										fig,
-										ntrack,
-										1,
-										2,
-										title="Reverse complement",
-										subticks_frequency=10,
-										ylab="REVERSE\nDeepExplainer",
-										)
+	
+	if post_hoc_conjoining:
+		ax1.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
+		ax2.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
 
+	# In silico mutagenesis
+	if in_silico_mut:
+		selected_classes = ["up"]
 		
-		if post_hoc_conjoining:
-			ax1.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
-			ax2.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
+		# Create empty numpy to contain the prediction delta for every nucleotide position
+		arrr_A = np.zeros((len(selected_classes),sequence[0].shape[0]))
+		arrr_C = np.zeros((len(selected_classes),sequence[0].shape[0]))
+		arrr_G = np.zeros((len(selected_classes),sequence[0].shape[0]))
+		arrr_T = np.zeros((len(selected_classes),sequence[0].shape[0]))
 
-		# In silico mutagenesis
-		if in_silico_mut:
-			selected_classes = ["up"]
-			
-			# Create empty numpy to contain the prediction delta for every nucleotide position
-			arrr_A = np.zeros((len(selected_classes),sequence[0].shape[0]))
-			arrr_C = np.zeros((len(selected_classes),sequence[0].shape[0]))
-			arrr_G = np.zeros((len(selected_classes),sequence[0].shape[0]))
-			arrr_T = np.zeros((len(selected_classes),sequence[0].shape[0]))
+		# Perform a baseline prediction for the sequence without any mutations
+		duo = [[np.expand_dims(sequence[0],2)], [np.expand_dims(sequence[1],2)]]
+		duo = [np.expand_dims(np.expand_dims(sequence[0],0),3), np.expand_dims(np.expand_dims(sequence[1],0),3)]
+		real_score = model.predict(duo)[0]			
+		
+		for mutloc in range(sequence[0].shape[0]):
+			rowohs = np.copy(sequence[0])
 
-			# Perform a baseline prediction for the sequence without any mutations
-			duo = [[np.expand_dims(sequence[0],2)], [np.expand_dims(sequence[1],2)]]
-			duo = [np.expand_dims(np.expand_dims(sequence[0],0),3), np.expand_dims(np.expand_dims(sequence[1],0),3)]
-			real_score = model.predict(duo)[0]			
-			
-			for mutloc in range(sequence[0].shape[0]):
-				rowohs = np.copy(sequence[0])
+			new_X_,new_X_RC = __mutate(rowohs, "A", mutloc)
+			#removing the lists around the input to the model, because it apparently now expects real arrays and not lists of arrays... :/
+			preda = model.predict([new_X_,new_X_RC], verbose=0)
+			arrr_A[:,mutloc]=(real_score - preda[0][0])
 
-				new_X_,new_X_RC = __mutate(rowohs, "A", mutloc)
-				#removing the lists around the input to the model, because it apparently now expects real arrays and not lists of arrays... :/
-				preda = model.predict([new_X_,new_X_RC], verbose=0)
-				arrr_A[:,mutloc]=(real_score - preda[0][0])
+			new_X_,new_X_RC = __mutate(rowohs, "C", mutloc)
+			arrr_C[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
 
-				new_X_,new_X_RC = __mutate(rowohs, "C", mutloc)
-				arrr_C[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
+			new_X_,new_X_RC = __mutate(rowohs, "G", mutloc)
+			arrr_G[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
 
-				new_X_,new_X_RC = __mutate(rowohs, "G", mutloc)
-				arrr_G[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
+			new_X_,new_X_RC = __mutate(rowohs, "T", mutloc)
+			arrr_T[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
 
-				new_X_,new_X_RC = __mutate(rowohs, "T", mutloc)
-				arrr_T[:,mutloc]=(real_score - model.predict([new_X_,new_X_RC], verbose=0)[0])
+		# We only want to plot the prediction delta of possbile mutations, 
+		# we set the delta 0 to None as these are the original nucleotides present in the sequence
+		arrr_A[arrr_A==0]=None
+		arrr_C[arrr_C==0]=None
+		arrr_G[arrr_G==0]=None
+		arrr_T[arrr_T==0]=None
 
-			# We only want to plot the prediction delta of possbile mutations, 
-			# we set the delta 0 to None as these are the original nucleotides present in the sequence
-			arrr_A[arrr_A==0]=None
-			arrr_C[arrr_C==0]=None
-			arrr_G[arrr_G==0]=None
-			arrr_T[arrr_T==0]=None
+		# Plotting for every nucleotide mutation
+		ax = fig.add_subplot(ntrack,1,3)
+		ax.scatter(range(rowohs.shape[0]),-1*arrr_A[[0]],label='A',color='green')
+		ax.scatter(range(rowohs.shape[0]),-1*arrr_C[[0]],label='C',color='blue')
+		ax.scatter(range(rowohs.shape[0]),-1*arrr_G[[0]],label='G',color='orange')
+		ax.scatter(range(rowohs.shape[0]),-1*arrr_T[[0]],label='T',color='red')
+		ax.legend()
+		ax.axhline(y=0,linestyle='--',color='gray')
 
-			# Plotting for every nucleotide mutation
-			ax = fig.add_subplot(ntrack,1,3)
-			ax.scatter(range(rowohs.shape[0]),-1*arrr_A[[0]],label='A',color='green')
-			ax.scatter(range(rowohs.shape[0]),-1*arrr_C[[0]],label='C',color='blue')
-			ax.scatter(range(rowohs.shape[0]),-1*arrr_G[[0]],label='G',color='orange')
-			ax.scatter(range(rowohs.shape[0]),-1*arrr_T[[0]],label='T',color='red')
-			ax.legend()
-			ax.axhline(y=0,linestyle='--',color='gray')
-
-		if fig_path:
-			cleaned_string = re.sub(r'[^a-zA-Z0-9]', '', gene_ids[i])
-			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.png"
-			fig.savefig(full_path)
-		else:
-			plt.show()
+	if full_path:
+		fig.savefig(full_path)
+	else:
+		plt.show()
 
 
 def __mutate(new_X_, base, mutloc):
