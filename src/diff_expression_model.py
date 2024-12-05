@@ -10,7 +10,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling1D, MaxPooling2D, AveragePooling2D, Activation, concatenate, BatchNormalization, maximum, Lambda
 from tensorflow.keras import regularizers 
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.metrics import AUC
+from tensorflow.keras.metrics import AUC, Recall, Precision
 from tensorflow.keras.utils import to_categorical  #alternative for the above line
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.callbacks import Callback
@@ -112,7 +112,9 @@ def compile_model(model, learning_rate=0.001, weight_decay=None):
 					'acc',
 					AUC(name= "auROC", curve="ROC"),
 					AUC(name = "auPRC", curve="PR"),
-					tf.keras.metrics.TruePositives()
+					tf.keras.metrics.TruePositives(),
+					Precision(),
+					Recall()
 				]
 	)
 
@@ -165,6 +167,11 @@ def post_hoc_conjoining(siamese_model, x_fw, x_rc):
 
 	return predicted_categories, prediction.squeeze()
 
+
+def get_auprc(y_labels, prediction):
+	precision, recall, thresholds = metrics.precision_recall_curve(y_labels, prediction, pos_label=1)
+	auPRC = metrics.auc(recall, precision)
+	return auPRC
 
 def get_auroc(y_labels, prediction):
 	fpr, tpr, thresholds = metrics.roc_curve(y_labels, prediction, pos_label=1)
