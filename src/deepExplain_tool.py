@@ -184,8 +184,8 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 		
 		__plot_saliency_map(shap_result=shap_result, 
 					  		sequence=sequence, 
-							start=start, 
-							stop=stop, 
+							start_offset=start, 
+							stop_offset=stop, 
 							post_hoc_conjoining=post_hoc_conjoining, 
 							gene_and_coordinates=gene_and_coordinates, 
 							full_path=full_path, 
