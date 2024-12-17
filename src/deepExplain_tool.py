@@ -136,7 +136,7 @@ def deepExplain(samples, loaded_model, bg, evo_aug=False, post_hoc_conjoining=Fa
 	return shap_result
 
 
-def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None):
+def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None, plot_title_prefix="Gene"):
 	"""
 	Plot the SHAP values for a list DNA sequence strands.
 
@@ -190,10 +190,11 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 							gene_and_coordinates=gene_and_coordinates, 
 							full_path=full_path, 
 							in_silico_mut=in_silico_mut, 
-							model=model)
+							model=model,
+							plot_title_prefix=plot_title_prefix)
 
 
-def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None, stride=500):
+def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None, plot_title_prefix="Gene", stride=500):
 	"""
 	Plot the SHAP values for a list of DNA sequence strands. For every sequence, both a complete saliency map will be plot as also 
 	a series of sliding window saliency maps. For larger sequences this provides a way to have a more detailed overview of the SHAP values.
@@ -206,6 +207,7 @@ def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], f
 	- fig_path (String): Path of the directory where the plots should be stored, if empty no plots will be saved.
 	- in_silico_mut (bool): Aside from the SHAP values also plot the in silico mutagenesis (this will increase the runtime drastically)
 	- model (Keras/TF): Trained model needed for the in silico mutagenesis
+	- plot_title_prefix (String): Prefix added to the sample id in the plot title (default: 'Gene')
 	- string (int): Stride used for the sliding window.
 
 	"""
@@ -267,7 +269,8 @@ def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], f
 							gene_and_coordinates=gene_ids[i],
 							full_path=full_path,
 							in_silico_mut=in_silico_mut,
-							model=model)
+							model=model,
+							plot_title_prefix=plot_title_prefix)
 
 		# Plot in chunked saliency map
 		while(start_offset + stride < stop_offset):
@@ -289,7 +292,8 @@ def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], f
 								gene_and_coordinates=gene_and_coordinates,
 								full_path=full_path,
 								in_silico_mut=in_silico_mut, 
-								model=model)
+								model=model,
+								plot_title_prefix=plot_title_prefix)
 			start_offset = start_offset + stride
 
 		# Plot the remaining part of the sequence
@@ -310,7 +314,8 @@ def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], f
 							gene_and_coordinates=gene_and_coordinates, 
 							full_path=full_path, 
 							in_silico_mut=in_silico_mut, 
-							model=model)
+							model=model,
+							plot_title_prefix=plot_title_prefix)
 
 
 def __get_gene_and_coordinate_name(coordinates_included, gene_id_short, chromosome="", coordinate_start=0, start_offset=0, stop_offset=1, strand=""):
@@ -339,12 +344,12 @@ def __get_filename(gene_and_coordinates, fig_path, add_full_postfix=False):
 	return full_path
 
 
-def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_hoc_conjoining, gene_and_coordinates, full_path, in_silico_mut, model):
+def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_hoc_conjoining, gene_and_coordinates, full_path, in_silico_mut, model, plot_title_prefix):
 	ntrack = 3 if in_silico_mut else 2
 	fig = plt.figure(figsize=(32,8))
 	
 	if gene_and_coordinates:
-		plt.title(f"Gene: {gene_and_coordinates}")
+		plt.title(f"{plot_title_prefix} {gene_and_coordinates}")
 		fw_title = ""
 	else:
 		fw_title = "Forward_strand"
