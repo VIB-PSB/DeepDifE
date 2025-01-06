@@ -16,7 +16,7 @@ from random import sample
 from random import sample
 from evoaug_tf import evoaug
 from DeepDifE.src.logo_plot_utils import plot_weights_modified
-
+from matplotlib.ticker import FuncFormatter
 
 
 def getDeepExplainerBackground(background_samples, shuffle, post_hoc_conjoining):
@@ -344,6 +344,17 @@ def __get_filename(gene_and_coordinates, fig_path, add_full_postfix=False):
 
 	return full_path
 
+def __create_bp_x_axis_formatter(ax):
+	def x_axis_formatter(x, pos):
+		# Get the tick locations and find the last tick
+		ticks = ax.get_xticks()
+		last_tick = ticks[-1] if len(ticks) > 0 else None
+		
+		# Add "bp" only to the last tick shown
+		if x == last_tick:
+			return f'{int(x)}bp'
+		return f'{int(x)}'
+	return FuncFormatter(x_axis_formatter)
 
 def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_hoc_conjoining, gene_and_coordinates, full_path, in_silico_mut, model, plot_title_prefix):
 	ntrack = 3 if in_silico_mut else 2
@@ -363,6 +374,8 @@ def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_h
 								ylab="Attribution scores",
 								)#highlight=coords #titleDictList[i]["startstop"] #,highlight={"black":[info[3] for info in titleDictList[i]["startstops"]]}
 
+	ax1.xaxis.set_major_formatter(__create_bp_x_axis_formatter(ax1))
+
 	if post_hoc_conjoining:
 		_, ax2 =plot_weights_modified(((shap_result[1]*sequence[1])[::-1,:][start_offset:stop_offset,:]),
 									fig,
@@ -373,13 +386,14 @@ def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_h
 									subticks_frequency=10,
 									ylab="Attribution scores",
 									)
-
 	
-	if post_hoc_conjoining:
-		ax1.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
-		ax2.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
+		min_y = min(ax1.get_ylim()[0], ax2.get_ylim()[0])
+		max_y = max(ax1.get_ylim()[1], ax2.get_ylim()[1])
 
+		ax1.set_ylim(min_y, max_y)
+		ax2.set_ylim(min_y, max_y)
 
+		ax2.xaxis.set_major_formatter(__create_bp_x_axis_formatter(ax2))
 
 	# In silico mutagenesis
 	if in_silico_mut:
