@@ -192,6 +192,7 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 							in_silico_mut=in_silico_mut, 
 							model=model,
 							plot_title_prefix=plot_title_prefix)
+		break
 
 
 def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None, plot_title_prefix="Gene ", stride=500):
@@ -349,18 +350,17 @@ def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_h
 	fig = plt.figure(figsize=(32,8))
 	
 	if gene_and_coordinates:
-		plt.title(f"{plot_title_prefix}{gene_and_coordinates}")
-		fw_title = ""
-	else:
-		fw_title = "Forward_strand"
+		fig.suptitle(f"{plot_title_prefix}{gene_and_coordinates}", x=0.51)
+
+
 	_, ax1 =plot_weights_modified((shap_result[0]*sequence[0])[start_offset:stop_offset,:],
 								fig,
 								ntrack,
 								1,
 								1,
-								title=fw_title, 
+								title="Input sequence", 
 								subticks_frequency=10,
-								ylab="FORWARD\nDeepExplainer",
+								ylab="Attribution scores",
 								)#highlight=coords #titleDictList[i]["startstop"] #,highlight={"black":[info[3] for info in titleDictList[i]["startstops"]]}
 
 	if post_hoc_conjoining:
@@ -371,13 +371,15 @@ def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_h
 									2,
 									title="Reverse complement",
 									subticks_frequency=10,
-									ylab="REVERSE\nDeepExplainer",
+									ylab="Attribution scores",
 									)
 
 	
 	if post_hoc_conjoining:
 		ax1.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
 		ax2.set_ylim([np.min([ax1.get_ylim()[0],ax2.get_ylim()[0] ]) , np.max([ax1.get_ylim()[1],ax2.get_ylim()[1] ])])
+
+
 
 	# In silico mutagenesis
 	if in_silico_mut:
