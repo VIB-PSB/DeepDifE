@@ -163,7 +163,7 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 		if fig_path:
 			os.makedirs(fig_path, exist_ok=True)
 			cleaned_string = re.sub(r'[^a-zA-Z0-9]', '_', gene_and_coordinates)
-			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.pdf"
+			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.svg"
 		else:
 			full_path = fig_path
 		
