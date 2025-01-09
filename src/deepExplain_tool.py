@@ -148,6 +148,7 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 	- fig_path (String): Path of the directory where the plots should be stored, if empty no plots will be saved.
 	- in_silico_mut (bool): Aside from the SHAP values also plot the in silico mutagenesis (this will increase the runtime drastically)
 	- model (Keras/TF): Trained model needed for the in silico mutagenesis
+	- plot_title_prefix: Prefix added to the plot title (default: "Gene ")
 
 	"""
 	# As the shap values are of shape (# samples, 2, #sequencelength, 4), we need to change the shape of the samples
@@ -160,8 +161,9 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 			gene_and_coordinates = ""
 		
 		if fig_path:
+			os.makedirs(fig_path, exist_ok=True)
 			cleaned_string = re.sub(r'[^a-zA-Z0-9]', '_', gene_and_coordinates)
-			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.png"
+			full_path = f"{fig_path}/{cleaned_string}_deepexplainer.pdf"
 		else:
 			full_path = fig_path
 		
@@ -192,8 +194,6 @@ def plotResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path
 							in_silico_mut=in_silico_mut, 
 							model=model,
 							plot_title_prefix=plot_title_prefix)
-		break
-
 
 def plotChunkedResults(shap_values, samples, post_hoc_conjoining, gene_ids=[], fig_path="", in_silico_mut=False, model=None, plot_title_prefix="Gene ", stride=500):
 	"""
@@ -444,9 +444,9 @@ def __plot_saliency_map(shap_result, sequence, start_offset, stop_offset, post_h
 		ax.axhline(y=0,linestyle='--',color='gray')
 
 	if full_path:
-		fig.savefig(full_path)
-	else:
-		plt.show()
+		fig.savefig(full_path, facecolor='white')
+	
+	plt.show()
 
 
 def __mutate(new_X_, base, mutloc):
