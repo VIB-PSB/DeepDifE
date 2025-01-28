@@ -88,22 +88,9 @@ def create_ortholog_lookup_table():
 	# To include the gene family to perform family-wise train-test split, we use the ortholog data
 	base_dir_ortholog = "/home/ubuntu/DeepDifE/data/phylo_aug/orthologs/"
 	ortholog_files = {
-					"ath-aar":"ath_aar.txt",
 					"ath-aly":"ath_aly.txt",
-					"ath-an1":"ath_ath-an1.txt",
-					"ath-c24":"ath_ath-c24.txt",
-					"ath-cvi":"ath_ath-cvi.txt",
-					"ath-eri":"ath_ath-eri.txt",
-					"ath-kyo":"ath_ath-kyo.txt",
-					"ath-ler":"ath_ath-ler.txt",
-					"ath-sha":"ath_ath-sha.txt",
-					"ath-ath":"ath_ath.txt",
 					"ath-chi":"ath_chi.txt",
-					"ath-cpa":"ath_cpa.txt",
-					"ath-cru":"ath_cru.txt",
-					"ath-esa":"ath_esa.txt",
-					"ath-spa":"ath_spa.txt",
-					"ath-tha":"ath_tha.txt"
+					"ath-cru":"ath_cru.txt"
 				}
 	
 	lookup_table = {}
@@ -133,14 +120,9 @@ def get_phylo_aug_data(dataset, max_distance=1000, include_accessions=True):
 	}
 
 	species_fasta_files = {
-				"aar":"aar.tss.fasta",
 				"aly":"aly.tss.fasta",
 				"chi":"chi.tss.fasta",
-				"cpa":"cpa.tss.fasta",
-				"cru":"cru.tss.fasta",
-				"esa":"esa.tss.fasta",
-				"spa":"spa.tss.fasta",
-				"tha":"tha.tss.fasta"
+				"cru":"cru.tss.fasta"
 	}
 
 	if(include_accessions):
@@ -194,6 +176,8 @@ def get_phylo_aug_data(dataset, max_distance=1000, include_accessions=True):
 
 
 def main():
+	print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
 	ppath = "/home/ubuntu/DeepDifE/data/dataset_solid_chrome.pkl"
 	with open(ppath, 'rb') as f:
 		data = pickle.load(f)
@@ -201,117 +185,81 @@ def main():
 	dataset = data.reset_index()
 	dataset = dataset[["geneID", "Category", "GeneFamily", "seqs"]]
 	dataset.rename(columns={"geneID":"GeneID", "Category":"Label", "seqs": "Sequence"}, inplace=True)
+	import time
+	start_time = time.time()
+	for max_phylo_distance in range(5, 6):
+			for rate in range(0, 3):
+				augmentation_rate = rate / 10
+				BATCH_SIZE = 100
 
-	# for max_phylo_distance in range(5,6):
-		# for rate in range(0, 10):
-	max_phylo_distance = 1
-	rate = 8
-	for rerun in range(0, 5):
-		augmentation_rate = rate / 10
-		BATCH_SIZE = 100
+				phylo_aug_df = get_phylo_aug_data(dataset, max_phylo_distance, include_accessions=False)
 
-		phylo_aug_df = get_phylo_aug_data(dataset, max_phylo_distance, include_accessions=True)
+				dataset["One_hot_encoded"] = one_hot_encode_series(dataset["Sequence"])
+				phylo_aug_df["One_hot_encoded"] = one_hot_encode_series(phylo_aug_df["Sequence"])
 
-		dataset["One_hot_encoded"] = one_hot_encode_series(dataset["Sequence"])
-		phylo_aug_df["One_hot_encoded"] = one_hot_encode_series(phylo_aug_df["Sequence"])
+				dataset["RC_one_hot_encoded"] = reverse_complement_series(dataset["One_hot_encoded"])
+				phylo_aug_df["RC_one_hot_encoded"] = reverse_complement_series(phylo_aug_df["One_hot_encoded"])
 
-		dataset["RC_one_hot_encoded"] = reverse_complement_series(dataset["One_hot_encoded"])
-		phylo_aug_df["RC_one_hot_encoded"] = reverse_complement_series(phylo_aug_df["One_hot_encoded"])
+				phylo_aug_df = phylo_aug_df[phylo_aug_df["GeneFamily"].notna()]
 
-		phylo_aug_df = phylo_aug_df[phylo_aug_df["GeneFamily"].notna()]
+				train_df, validation_test_df = grouped_shuffle_split(dataset, dataset["GeneFamily"], 0.2)
+				validation_df, test_df  = grouped_shuffle_split(validation_test_df, validation_test_df["GeneFamily"], 0.5)
 
-		train_df, validation_test_df = grouped_shuffle_split(dataset, dataset["GeneFamily"], 0.2)
-		validation_df, test_df  = grouped_shuffle_split(validation_test_df, validation_test_df["GeneFamily"], 0.5)
+				print(f"Length of training set: {train_df.shape[0]}")
+				print(f"Length of validation set: {validation_df.shape[0]}")
+				print(f"Length of test set: {test_df.shape[0]}")
 
-		print(f"Length of training set: {train_df.shape[0]}")
-		print(f"Length of validation set: {validation_df.shape[0]}")
-		print(f"Length of test set: {test_df.shape[0]}")
+				filtered_phylo_aug_df = phylo_aug_df[~phylo_aug_df["Ortholog"].isin(validation_test_df["GeneID"])]
 
-		filtered_phylo_aug_df = phylo_aug_df[~phylo_aug_df["Ortholog"].isin(validation_test_df["GeneID"])]
+				x_validation, y_validation = get_input_and_labels(validation_df)
 
-		x_validation, y_validation = get_input_and_labels(validation_df)
+				train_data_gen = data_gen(train_df,filtered_phylo_aug_df, BATCH_SIZE, True, augmentation_rate)
 
-		train_data_gen = data_gen(train_df,filtered_phylo_aug_df, BATCH_SIZE, True, augmentation_rate)
+				input_shape = train_df["One_hot_encoded"].iloc[0].shape
+				model = get_model(input_shape=input_shape, perform_evoaug=False,learning_rate=0.001)
 
-		input_shape = train_df["One_hot_encoded"].iloc[0].shape
-		model = get_model(input_shape=input_shape, perform_evoaug=False,learning_rate=0.001)
+				# early stopping callback
 
-		# early stopping callback
+				early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+															patience=40,
+															verbose=1,
+															mode='min',
+															restore_best_weights=True)
+				# reduce learning rate callback
+				reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
+																factor=0.1,
+																patience=5,
+																min_lr=1e-7,
+																mode='min',
+																verbose=1)
+				callbacks = [early_stopping_callback, reduce_lr]
 
-		early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-													patience=40,
-													verbose=1,
-													mode='min',
-													restore_best_weights=True)
-		# reduce learning rate callback
-		reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
-														factor=0.1,
-														patience=5,
-														min_lr=1e-7,
-														mode='min',
-														verbose=1)
-		callbacks = [early_stopping_callback, reduce_lr]
+				model.fit(train_data_gen,
+							steps_per_epoch=math.ceil(
+								train_df.shape[0] / BATCH_SIZE),
+							epochs=100,
+							validation_data=(x_validation, y_validation),
+							callbacks=callbacks
+							)
+				scores = model.evaluate(x_validation, y_validation, verbose=0)
 
-		model.fit(train_data_gen,
-					steps_per_epoch=math.ceil(
-						train_df.shape[0] / BATCH_SIZE),
-					epochs=100,
-					validation_data=(x_validation, y_validation),
-					callbacks=callbacks
-					)
-		scores = model.evaluate(x_validation, y_validation, verbose=0)
+				x_train_pure, y_train_pure = get_input_and_labels(train_df)
 
-		x_train_pure, y_train_pure = get_input_and_labels(train_df)
+				# set up callbacks
+				model = compile_model(model, learning_rate=0.0001)
 
-		# set up callbacks
-		model = compile_model(model, learning_rate=0.0001)
+				# train model
+				model.fit(x_train_pure, y_train_pure,
+								epochs=10,
+								batch_size=100,
+								shuffle=True,
+								validation_data=(x_validation, y_validation),
+								callbacks=[early_stopping_callback])
 
-		# train model
-		history = model.fit(x_train_pure, y_train_pure,
-						epochs=10,
-						batch_size=100,
-						shuffle=True,
-						validation_data=(x_validation, y_validation),
-						callbacks=[early_stopping_callback])
-
-		auroc_values = history.history['val_loss']
-
-		# Find the index of the epoch where AUROC is the maximum
-		max_auroc_epoch = np.argmin(auroc_values)
-
-		# Extract all the metrics for the epoch with the maximum AUROC
-		metrics_at_max_auroc = {metric: values[max_auroc_epoch] for metric, values in history.history.items()}
-		metrics_at_max_auroc
-
-		# Find training score
-		train_auroc = metrics_at_max_auroc["auROC"]
-
-		val_scores = model.evaluate(x_validation, y_validation, verbose=0)
-
-		siamese_model = get_siamese_model(model)
-
-		x_test = np.stack(test_df["One_hot_encoded"])
-		x_test_rc = np.stack(test_df["RC_one_hot_encoded"])
-		y_test = test_df["Label"].to_numpy()
-		predictions_categories, predictions = post_hoc_conjoining(siamese_model, x_test, x_test_rc)
-		test_auroc = get_auroc(y_test, predictions)
-
-		x_val = np.stack(validation_df["One_hot_encoded"])
-		x_val_rc = np.stack(validation_df["RC_one_hot_encoded"])
-
-		y_val = validation_df["Label"].to_numpy()
-
-		# x_val = model._pad_end(x_val)
-		# x_val_rc = model._pad_end(x_val_rc)
-
-		predictions_categories, predictions = post_hoc_conjoining(siamese_model, x_val, x_val_rc)
-
-		post_hoc_validation = get_auroc(y_val, predictions)
-
-		f = open("/home/ubuntu/DeepDifE/results/result_phylo_only_accessions_rate_0.8_with_post_hoc_conjoing_val.csv", "a")
-		f.write(f'{max_phylo_distance},{augmentation_rate},{val_scores[0]},{val_scores[1]},{val_scores[2]},{val_scores[3]},{val_scores[4]},{test_auroc},{train_auroc},{post_hoc_validation}\n')
-		f.close()
-
-
+				scores = model.evaluate(x_validation, y_validation, verbose=0)
+				f = open("/home/ubuntu/DeepDifE/data/phylo_aug/results/result_distribution_rate_distance.csv", "a")
+				f.write(f'{max_phylo_distance},{augmentation_rate},{scores[0]},{scores[1]},{scores[2]},{scores[3]},{scores[4]}\n')
+				f.close()
+	print("--- %s seconds ---" % (time.time() - start_time))
 if __name__=="__main__":
 	main()

@@ -10,7 +10,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling1D, MaxPooling2D, AveragePooling2D, Activation, concatenate, BatchNormalization, maximum, Lambda
 from tensorflow.keras import regularizers 
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.metrics import AUC
+from tensorflow.keras.metrics import AUC, Recall, Precision
 from tensorflow.keras.utils import to_categorical  #alternative for the above line
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.callbacks import Callback
@@ -112,7 +112,9 @@ def compile_model(model, learning_rate=0.001, weight_decay=None):
 					'acc',
 					AUC(name= "auROC", curve="ROC"),
 					AUC(name = "auPRC", curve="PR"),
-					tf.keras.metrics.TruePositives()
+					tf.keras.metrics.TruePositives(),
+					Precision(),
+					Recall()
 				]
 	)
 
@@ -152,7 +154,18 @@ def get_siamese_model(model):
 	return siamese_model
 
 
-def post_hoc_conjoining(siamese_model, x_fw, x_rc):
+def post_hoc_conjoining(siamese_model, x_fw, x_rc, evoaug_padding=True, evoaug_list=[]):
+
+	# As the padding happens by a seed we need to set a fixed seet to get a deterministic inference across runs
+	if evoaug_padding:
+		if not evoaug_list:
+			print("Please provide an augment list when trying to apply evo aug padding")
+		
+		evo_model = get_model(input_shape=tuple(x_fw.shape[1:3]), perform_evoaug=True, augment_list=evoaug_list,learning_rate=0.001)
+
+		tf.random.set_seed(1234)
+		x_fw = evo_model._pad_end(x_fw)
+		x_rc = evo_model._pad_end(x_rc)
 
 	prediction = siamese_model.predict([x_fw, x_rc])
 	predicted_categories = []
@@ -165,6 +178,11 @@ def post_hoc_conjoining(siamese_model, x_fw, x_rc):
 
 	return predicted_categories, prediction.squeeze()
 
+
+def get_auprc(y_labels, prediction):
+	precision, recall, thresholds = metrics.precision_recall_curve(y_labels, prediction, pos_label=1)
+	auPRC = metrics.auc(recall, precision)
+	return auPRC
 
 def get_auroc(y_labels, prediction):
 	fpr, tpr, thresholds = metrics.roc_curve(y_labels, prediction, pos_label=1)
