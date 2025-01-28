@@ -154,7 +154,18 @@ def get_siamese_model(model):
 	return siamese_model
 
 
-def post_hoc_conjoining(siamese_model, x_fw, x_rc):
+def post_hoc_conjoining(siamese_model, x_fw, x_rc, evoaug_padding=True, evoaug_list=[]):
+
+	# As the padding happens by a seed we need to set a fixed seet to get a deterministic inference across runs
+	if evoaug_padding:
+		if not evoaug_list:
+			print("Please provide an augment list when trying to apply evo aug padding")
+		
+		evo_model = get_model(input_shape=tuple(x_fw.shape[1:3]), perform_evoaug=True, augment_list=evoaug_list,learning_rate=0.001)
+
+		tf.random.set_seed(1234)
+		x_fw = evo_model._pad_end(x_fw)
+		x_rc = evo_model._pad_end(x_rc)
 
 	prediction = siamese_model.predict([x_fw, x_rc])
 	predicted_categories = []
