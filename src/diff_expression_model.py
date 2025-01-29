@@ -154,7 +154,7 @@ def get_siamese_model(model):
 	return siamese_model
 
 
-def post_hoc_conjoining(siamese_model, x_fw, x_rc, evoaug_padding=True, evoaug_list=[]):
+def post_hoc_conjoining(siamese_model, x_fw, x_rc, evoaug_padding=False, evoaug_list=[]):
 
 	# As the padding happens by a seed we need to set a fixed seet to get a deterministic inference across runs
 	if evoaug_padding:
