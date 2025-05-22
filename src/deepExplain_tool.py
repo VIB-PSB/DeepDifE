@@ -15,7 +15,7 @@ import pickle
 from random import sample
 from random import sample
 from evoaug_tf import evoaug
-from DeepDifE.src.logo_plot_utils import plot_weights_modified
+from src.logo_plot_utils import plot_weights_modified
 from matplotlib.ticker import FuncFormatter
 
 
