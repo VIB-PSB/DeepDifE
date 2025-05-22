@@ -1,0 +1,11 @@
+Query_ID	Target_ID	Optimal_offset	p-value	E-value	q-value	Overlap	Query_consensus	Target_consensus	Orientation
+1	MX0162_bHLH	0	4.94165e-05	0.0996237	0.199247	6	CATGTG	CATGTG	-
+1	MX0188_RAV	0	0.000928598	1.87205	0.981446	6	CATGTG	CAGGTG	-
+1	M01755_bHLH	1	0.00210114	4.23589	0.981446	6	CATGTG	GCAAGTGGC	-
+1	M01646_RAV	3	0.0028742	5.79439	0.981446	6	CATGTG	ATTCAGGTGT	-
+1	MA1739.2_bHLH	0	0.00380543	7.67174	0.981446	6	CATGTG	CAAGTTG	-
+1	MA1358.2_bHLH	1	0.0047876	9.6518	0.981446	6	CATGTG	GCAAGTTG	-
+
+# Tomtom (Motif Comparison Tool): Version 5.5.5 compiled on Sep  5 2024 at 18:03:13
+# The format of this file is described at https://meme-suite.org/meme/doc/tomtom-output-format.html.
+# tomtom -no-ssc -oc . --verbosity 1 -text -min-overlap 5 -mi 1 -dist pearson -evalue -thresh 10.0 /data/tmp/105019/tmppu4cjzh_ data/jaspar_cisbp_other_source_no_high_similarity_tfbs_annot.meme

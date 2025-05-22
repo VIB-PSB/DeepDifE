@@ -1,0 +1,10 @@
+Query_ID	Target_ID	Optimal_offset	p-value	E-value	q-value	Overlap	Query_consensus	Target_consensus	Orientation
+1	MA1016.1_GATA	3	0.00116967	2.35805	1	6	GATCAG	TATGATCAG	+
+1	M01941_GATA	1	0.00235362	4.74489	1	6	GATCAG	AGATCAA	+
+1	MA1014.1_GATA	2	0.00322769	6.50703	1	6	GATCAG	TAGATCTG	+
+1	MA1013.1_GATA	2	0.00421692	8.50131	1	6	GATCAG	TAGATCTG	+
+1	M06885_GATA	7	0.00480544	9.68776	1	6	GATCAG	TCGATCGGATTAG	+
+
+# Tomtom (Motif Comparison Tool): Version 5.5.5 compiled on Sep  5 2024 at 18:03:13
+# The format of this file is described at https://meme-suite.org/meme/doc/tomtom-output-format.html.
+# tomtom -no-ssc -oc . --verbosity 1 -text -min-overlap 5 -mi 1 -dist pearson -evalue -thresh 10.0 /data/tmp/105019/tmp_ts8bhfj data/jaspar_cisbp_other_source_no_high_similarity_tfbs_annot.meme
