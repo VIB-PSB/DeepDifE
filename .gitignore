@@ -12,5 +12,6 @@ log.file
 *.png
 !report/*.png
 !report/trimmed_logos/*.png
+!logo.png
 # Ignore SLURM output
 slurm*.out
