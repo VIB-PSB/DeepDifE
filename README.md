@@ -1,6 +1,3 @@
-![alt text](logo.png)
-
-
 # DeepDiFE
 
 DeepDifE is the core model to classify differential expression of genes under specific stresses, based on cis-regulatory elements. 
