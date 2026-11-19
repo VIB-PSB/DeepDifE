@@ -51,3 +51,28 @@ def reverse_complement_series(data_series):
 	"""
 	reverse_complement = data_series.apply(reverse_complement_sequence)
 	return reverse_complement
+
+
+def get_input_and_labels(df):
+    """
+    Helper function for preparing data for model
+
+    Args:
+        df (pd.DataFrame): DataFrame that has one hot encoded sequences (and rc)
+
+    Returns:
+        two np.ndarray: (1) One hot encoded and reverse sequence tensor,
+                        (2) Label tensor corresponding to (1)
+    """
+    ohe_np = np.stack(df["One_hot_encoded"])
+    rc_np = np.stack(df["RC_one_hot_encoded"])
+    x = np.append(ohe_np, rc_np, axis=0)
+    x = x.astype('float32')
+    y = np.append(df["Label"], df["Label"])
+    y = y.astype('int')
+
+    return x, y
+
+
+
+

@@ -1,24 +1,54 @@
-# DeepDiFE
+# DeepDifE
 
-DeepDifE is the core model to classify differential expression of genes under specific stresses, based on cis-regulatory elements. In this repo you can find examples on how to train this model and perform hyperparameter tuning.
-
+DeepDifE is a deep learning model that predicts whether a gene is differentially expressed under a specific stress condition, based on the cis-regulatory elements in its sequence. This repository contains examples of how to train the model and how to tune its hyperparameters.
 
 ## Getting started
 
-Use the `requirements.txt` file to install the necessary python packages using *pip* or *conda*.
+### Installation
+
+Clone the repository and install the dependencies listed in `requirements.txt`:
+
+```bash
+git clone https://github.com/VIB-PSB/DeepDifE
+cd DeepDifE
+pip install -r requirements.txt
+```
+
+Or, in a conda environment:
+
+```bash
+conda create -n deepdife python=3.10
+conda activate deepdife
+pip install -r requirements.txt
+```
+
+### Input data
+
+The training data is a CSV file with the following columns:
+
+| Column        | Description |
+|---------------|-------------|
+| `GeneId`      | Unique gene identifier |
+| `gene_family` | Gene family the gene belongs to |
+| `Label`       | Differential expression class. 1 = differentially expressed, 0 = not |
+| `Sequence`    | Promoter sequence of the gene. All sequences must have the same length. |
 
 ### Training
-In the `train_model.py`, the dataset is first parsed, one-hot-encoded and split into N equal chunks N (`splits`). Subsequently N models are trained using each a different chunk as hold-out test set. The input of these models is a forward and reverse complement one-hot-encoded version of a sequence of a predetermined shape (`shape`). 
 
-The expected input file should be a CSV file containing the following columns:
-- GeneId,
-- gene_family
-- Label
-- Sequence
+`train_model.py` trains the model using k-fold cross-validation:
 
+1. The dataset is parsed, one-hot encoded and split into N equally sized folds (set with the `splits` parameter).
+2. N models are trained, each one holding out a different fold as its test set.
+3. Each model takes two inputs: the one-hot-encoded sequence and its reverse complement, both with a fixed shape set by the `shape` parameter.
+
+```bash
+python train_model.py
+```
 
 ### Hyperparameter optimization
-The python package *Optuna* was imported to optimize the hyperparameters using the Tree-structured Parzen Estimator algorithm. In the script `hyperparameter_optimisation.py` an example can be found where a couple of hyperparameters were tuned.
 
+Hyperparameters are tuned with [Optuna](https://optuna.org/) using the Tree-structured Parzen Estimator (TPE) sampler. `hyperparameter_optimisation.py` shows an example that tunes a selection of hyperparameters:
 
-
+```bash
+python hyperparameter_optimisation.py
+```

@@ -4,7 +4,6 @@
 # or
 # sbatch -p all -c 1 --mem 70G start_jupyterlab_cluster.sh 8894
 
-module load regquest/x86_64/1.0
-module unload python/x86_64/3.8.0
+source activate deepdife2
 
-python3 scripts/train_model_phylo_aug.py
+python3 scripts/train_model.py --data /data/gent/vo/001/gvo00149/vsc43300/DeepDifE_github/data/example_data_set.csv --splits 2 --shape 600 --name test

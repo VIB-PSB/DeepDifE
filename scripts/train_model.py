@@ -12,12 +12,11 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC, Recall, Precision
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.prepare_dataset import one_hot_encode_series, reverse_complement_series
+from src.prepare_dataset import one_hot_encode_series, reverse_complement_series, get_input_and_labels
 
 # Arguments given by flags
 parser = argparse.ArgumentParser(description='model info')
 parser.add_argument('--data', action="store", dest='data')
-parser.add_argument('--analysis', action="store", dest='analysis')
 parser.add_argument('--splits', action="store", dest='splits', default=5)
 parser.add_argument('--shape', action="store", dest='shape', default=600)
 parser.add_argument('--name', action="store", dest='name')
@@ -101,26 +100,6 @@ def read_data():
     splitter = GroupKFold(n_splits=int(args.splits))
     folds = list(splitter.split(full_data, full_data["Label"], groups=full_data["gene_family"]))
     return full_data, folds
-
-
-def get_input_and_labels(df):
-    """ 
-    Helper function for preparing data for model
-
-    Args:
-        df (pd.DataFrame): DataFrame that has one hot encoded sequences (and rc)
-
-    Returns:
-        two np.ndarray: (1) One hot encoded and reverse sequence tensor,
-                        (2) Label tensor corresponding to (1)
-    """    
-    ohe_np = np.stack(df["One_hot_encoded"])
-    rc_np = np.stack(df["RC_one_hot_encoded"])
-    x = np.append(ohe_np, rc_np, axis=0)
-    x = x.astype('float32')
-    y = np.append(df["Label"], df["Label"])
-
-    return x, y
 
 
 def create_model(input_shape,kernel_size_1,number_of_convolutions,number_of_filters_1,number_of_filters_2,conv_strides):
