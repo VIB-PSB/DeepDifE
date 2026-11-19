@@ -1,4 +1,6 @@
 import argparse
+import sys
+from pathlib import Path
 import tensorflow as tf
 import numpy as np
 import pandas as pd
@@ -8,6 +10,9 @@ from tensorflow.keras import regularizers
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC, Recall, Precision
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from src.prepare_dataset import one_hot_encode_series, reverse_complement_series
 
 # Arguments given by flags
 parser = argparse.ArgumentParser(description='model info')
@@ -27,7 +32,6 @@ strides = [5,3,4,4,3]
 kernel = [8,4,8,6,8]
 
 def main():
-
     full_data, folds = read_data()
     input_shape = int(args.shape)
     # Training setup
@@ -69,6 +73,7 @@ def main():
         # Create model
         model_opt = create_model(input_shape, kernel_size, number_of_convolutions, number_of_filters_1, number_of_filters_2, conv_strides)
         x_train, y_train = get_input_and_labels(full_train)
+        
         x_validation, y_validation = get_input_and_labels(validation)
 
         # Train model
@@ -87,84 +92,9 @@ def main():
     return 0
 
 
-def __one_hot_encode_nucleotide(nucleotide):
-	"""
-	One-hot encode a single nucleotide. This one-hot-encoding can not be changed as 
-	it will disturb the symmetry needed by the reverse complement creation
-	"""
-	mapping = {'A': [1, 0, 0, 0],
-			   'C': [0, 1, 0, 0],
-			   'G': [0, 0, 1, 0],
-			   'T': [0, 0, 0, 1]}
-	return mapping.get(nucleotide, [0, 0, 0, 0])
-
-
-def one_hot_encode_sequence(sequence):
-	"""One-hot encode a sequence of nucleotides."""
-	return np.array([__one_hot_encode_nucleotide(nuc) for nuc in sequence])
-
-
-def one_hot_encode_series(data_series):
-	"""
-	Add a one-hot-encoded version of the column defined by the column_name to the dataset object 
-
-	Parameters:
-	- dataSerie (pandas DataSerie): Dataframe containing containing the geneIDs and its sequences
-
-	Returns:
-	- pandas DataSeries: one-hot-encoded version of the input dataSeries
-	"""
-	one_hot_encoded = data_series.apply(one_hot_encode_sequence)
-	return one_hot_encoded
-
-
-def reverse_complement_sequence(sequence):
-	"""
-	Flip the array over both axes. This highly depends on the symmetry of the ACGT one-hot-encoding
-	"""
-	reverse_complement_one_hot = np.flip(sequence)
-	return reverse_complement_one_hot
-
-
-def reverse_complement_series(data_series):
-	"""
-	Add a one-hot-encoded version of the column defined by the column_name to the dataset object 
-
-	Parameters:
-	- dataset (pandas DataFrame): Dataframe containing containing the geneIDs and its sequences
-
-	Returns:
-	- pandas DataSeries: reverse complement of the input dataSeries
-	"""
-	reverse_complement = data_series.apply(reverse_complement_sequence)
-	return reverse_complement
-
-
-def complement_sequence(sequence):
-    """
-    Flip the array over the second axis. This highly depends on the symmetry of the ACGT one-hot-encoding
-    """
-    complement_one_hot = np.flip(sequence, axis=1)
-    return complement_one_hot
-
-
-def complement_series(data_series):
-    """
-    Add a one-hot-encoded version of the column defined by the column_name to the dataset object 
-
-    Parameters:
-    - dataset (pandas DataFrame): Dataframe containing containing the geneIDs and its sequences
-
-    Returns:
-    - pandas DataSeries: complement of the input dataSeries
-    """
-    complement = data_series.apply(complement_sequence)
-    return complement
-
-
 def read_data():
 
-    full_data = pd.read_csv(args.data)
+    full_data = pd.read_csv(args.data, header=0)
     full_data = full_data[full_data["Sequence"].str.len() == int(args.shape)]
     full_data["One_hot_encoded"] = one_hot_encode_series(full_data["Sequence"])
     full_data["RC_one_hot_encoded"] = reverse_complement_series(full_data["One_hot_encoded"])
