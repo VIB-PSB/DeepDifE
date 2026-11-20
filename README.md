@@ -42,7 +42,8 @@ The training data is a CSV file with the following columns:
 3. Each model takes two inputs: the one-hot-encoded sequence and its reverse complement, both with a fixed shape set by the `shape` parameter.
 
 ```bash
-python train_model.py
+e.g.
+python scripts/train_model.py --data data/example_data_set.csv --splits 5 --shape 600 --name ABADL
 ```
 
 ### Hyperparameter optimization
@@ -50,5 +51,5 @@ python train_model.py
 Hyperparameters are tuned with [Optuna](https://optuna.org/) using the Tree-structured Parzen Estimator (TPE) sampler. `hyperparameter_optimisation.py` shows an example that tunes a selection of hyperparameters:
 
 ```bash
-python hyperparameter_optimisation.py
+python scripts/hyperparameter_optimisation.py --data data/example_data_set.csv --trials 50 --splits 5 --shape 600
 ```
