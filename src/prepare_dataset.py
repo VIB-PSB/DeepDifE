@@ -1,7 +1,4 @@
-import pandas as pd
 import numpy as np
-from Bio import SeqIO
-from sklearn.model_selection import GroupShuffleSplit
 
 def __one_hot_encode_nucleotide(nucleotide):
 	"""
@@ -56,66 +53,25 @@ def reverse_complement_series(data_series):
 	return reverse_complement
 
 
-def grouped_shuffle_split(dataset, groups, test_train_ratio, random_state=42):
-	groupSplitter = GroupShuffleSplit(test_size=test_train_ratio, n_splits=1, random_state=random_state)
-	train_idx = list(groupSplitter.split(dataset, groups=groups))[0][0]
-	test_idx = list(groupSplitter.split(dataset, groups=groups))[0][1]
+def get_input_and_labels(df):
+    """
+    Helper function for preparing data for model
 
-	return dataset.iloc[train_idx], dataset.iloc[test_idx]
+    Args:
+        df (pd.DataFrame): DataFrame that has one hot encoded sequences (and rc)
 
+    Returns:
+        two np.ndarray: (1) One hot encoded and reverse sequence tensor,
+                        (2) Label tensor corresponding to (1)
+    """
+    ohe_np = np.stack(df["One_hot_encoded"])
+    rc_np = np.stack(df["RC_one_hot_encoded"])
+    x = np.append(ohe_np, rc_np, axis=0)
+    x = x.astype('float32')
+    y = np.append(df["Label"], df["Label"])
+    y = y.astype('int')
 
-def prepare_dataset_from_fasta(fasta_path, dataset, output_path=None):
-	""""
-	Based on a dataset containing the gene ids, labels and genefamilies, extract the sequences from a fasta file.
-	The gene id's of the fasta file are expected to be in the following format: <GeneID>::<additional info>
-	In the resulting dataframe, the gene id from the fasta file is used.
-
-	Parameters:
-	- dataset (pandas DataFrame): Dataframe containing containing the following columns GeneID, Label and GeneFamily
-	- fasta_url (String): Path to the fasta file containing the sequences
-	- output_path (String): Path where the resulting dataframe will be saved as a CSV file. If None no file will be saved.
-
-	Returns:
-	- pandas DataFrame: Dataframe containing the gene id, label, gene family and sequence
-	"""
-
-	# Check if dataset contains the necessary columns
-	required_columns = ["GeneID", "Label", "GeneFamily"]
-	missing_columns = [col for col in required_columns if col not in dataset.columns]
-
-	if missing_columns:
-		print(f"Missing columns: {', '.join(missing_columns)}")
-	else:
-		print("All required columns are present.")
-
-	# Create the dicts for easy lookup
-	label_dict = dataset.set_index('GeneID')['Label'].to_dict()
-	gf_dict = dataset.set_index('GeneID')['GeneFamily'].to_dict()
-
-	gene_id_list	= []
-	sequence_list	= []
-	label_list		= []
-	gf_list			= []
-
-	genes = list(dataset.GeneID)
-	
-	fasta_sequences = SeqIO.parse(open(fasta_path),'fasta')
-
-	for fasta in fasta_sequences:
-		name, sequence = fasta.id, str(fasta.seq)
-		gene_id = name.split(":")[0]
-		if gene_id in genes:
-			gene_id_list.append(name)
-			sequence_list.append(sequence)
-			label_list.append(label_dict[gene_id])
-			gf_list.append(gf_dict[gene_id])
-	
-	complete_dataset = pd.DataFrame({"GeneID":gene_id_list, "Label":label_list, "GeneFamily": gf_list, "Sequence": sequence_list})
-
-	if output_path:
-		complete_dataset.to_csv(output_path, index=False)
-
-	return complete_dataset
+    return x, y
 
 
 

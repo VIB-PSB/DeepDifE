@@ -1,31 +1,55 @@
-# DeepDiFE
+# DeepDifE
 
-DeepDifE is the core model to classify differential expression of genes under specific stresses, based on cis-regulatory elements. 
-
+DeepDifE is a deep learning model that predicts whether a gene is differentially expressed under a specific stress condition, based on the cis-regulatory elements in its sequence. This repository contains examples of how to train the model and how to tune its hyperparameters.
 
 ## Getting started
 
-Use the `requirements.txt` file to install the necessary python packages using *pip* or *conda*.
+### Installation
 
-## Notebooks
-This repository includes several notebooks which can be used as a starting point to experiment with the DeepDiFE analysis toolkit. In this repository, we mainly focus on the prediction of differentially expressed genes in Arabidopsis thaliana under ABA treatment. We divided the complete training and analysis in the following steps
+Clone the repository and install the dependencies listed in `requirements.txt`:
+
+```bash
+git clone https://github.com/VIB-PSB/DeepDifE
+cd DeepDifE
+pip install -r requirements.txt
+```
+
+Or, in a conda environment:
+
+```bash
+conda create -n deepdife python=3.10
+conda activate deepdife
+pip install -r requirements.txt
+```
+
+### Input data
+
+The training data is a CSV file with the following columns:
+
+| Column        | Description |
+|---------------|-------------|
+| `GeneId`      | Unique gene identifier |
+| `gene_family` | Gene family the gene belongs to |
+| `Label`       | Differential expression class. 1 = differentially expressed, 0 = not |
+| `Sequence`    | Promoter sequence of the gene. All sequences must have the same length. |
 
 ### Training
-In the `train_model_tutorial.ipynb`, you will learn how to initialize a DeepDifE model, prepare the training the data and start the training of the CNN model. For this notebook the EvoAug augmentation is enabled, in order to increase the number of training samples. 
 
-If you want to use the PhyloAug augmentation technique, you can find an example in `train_model_phylo_aug.ipynb`. Here orthologous genes from distant species were used to extend the training set. 
+`train_model.py` trains the model using k-fold cross-validation:
 
-Finally, `train_model_cross_validation_tutorial.ipynb` shows how to apply cross-validation training, which is usefull in the case of a low amount of training samples.
+1. The dataset is parsed, one-hot encoded and split into N equally sized folds (set with the `splits` parameter).
+2. N models are trained, each one holding out a different fold as its test set.
+3. Each model takes two inputs: the one-hot-encoded sequence and its reverse complement, both with a fixed shape set by the `shape` parameter.
+
+```bash
+e.g.
+python scripts/train_model.py --data data/example_data_set.csv --splits 5 --shape 600 --name ABADL
+```
 
 ### Hyperparameter optimization
-The python package *Optuna* was imported to optimize the hyperparameters using the Tree-structured Parzen Estimator algorithm. In the notebook `hyperparameter_optimisation.ipynb` an example can be found where a couple of hyperparameters were tuned.
 
-### Explainability
-After training a model with strong predictive performance, the next step is to interpret what sequence patterns drive these predictions.
+Hyperparameters are tuned with [Optuna](https://optuna.org/) using the Tree-structured Parzen Estimator (TPE) sampler. `hyperparameter_optimisation.py` shows an example that tunes a selection of hyperparameters:
 
-First, the `saliency_map_tutorial.ipynb` demonstrates how to apply *DeepExplainer* to compute SHAP values based on a selection of input sequences. These can be vizualized in a saliency map highlighting which parts of the sequences contribute to a positive or negative classification.
-
-Next, in the `tfmodisco_tutorial.ipynb` notebook, the selected sequences and their corresponding SHAP values are used to identify and cluster important sequence patterns, known as seqlets. Using a motif database such as JASPAR, these seqlets can be matched to known motifs, enabling the generation of a report that quantifies how existing motifs contribute to the model’s classifications.
-
-
-
+```bash
+python scripts/hyperparameter_optimisation.py --data data/example_data_set.csv --trials 50 --splits 5 --shape 600
+```
